@@ -1,8 +1,9 @@
 import pandas as pd
 from pathlib import Path
 import streamlit as st
+import os
 
-DATA_PATH = Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx"
+DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx")))
 
 CARRERA_NAMES = {
     "IOC": "Ing. Obras Civiles",
@@ -25,6 +26,11 @@ CARRERA_COLORS = {
 
 @st.cache_data
 def load_data() -> dict[str, pd.DataFrame]:
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(
+            f"No se encontró el Excel en {DATA_PATH}. Monta el archivo en /data/RA_UandesFunctional.xlsx o define DATA_PATH."
+        )
+
     xl = pd.ExcelFile(DATA_PATH)
 
     general = xl.parse("general").dropna(subset=["ID"])

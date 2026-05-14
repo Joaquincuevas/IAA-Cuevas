@@ -19,7 +19,7 @@ SECRET_KEY = "trace-analytics-secret-2026"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
-DATA_PATH = Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx"
+DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx")))
 
 USERS = {
     "jjcuevas@miuandes.cl": {"password": "admin123", "name": "J. Cuevas", "role": "admin"},
@@ -61,6 +61,11 @@ def get_data():
     global _data_cache
     if _data_cache is not None:
         return _data_cache
+
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(
+            f"No se encontró el Excel en {DATA_PATH}. Monta el archivo en /data/RA_UandesFunctional.xlsx o define DATA_PATH."
+        )
 
     xl = pd.ExcelFile(DATA_PATH)
 
