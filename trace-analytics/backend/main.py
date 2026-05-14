@@ -353,6 +353,38 @@ def get_redundancia(email: str = Depends(verify_token)):
         },
     }
 
+
+@app.get("/api/objectives")
+def get_objectives(email: str = Depends(verify_token)):
+    """Devuelve la lista de objetivos con su descripción (columna 'Objetivo' si existe)."""
+    data = get_data()
+    objectives = data.get("objectives")
+    rows = []
+    cols = set(objectives.columns.tolist())
+    for _, row in objectives.iterrows():
+        rows.append({
+            "curso": row["ID"] if "ID" in cols else "",
+            "id_objetivo": row["ID_Objetivo"] if "ID_Objetivo" in cols else "",
+            "descripcion": row["Objetivo"] if "Objetivo" in cols else "",
+        })
+    return {"objectives": rows}
+
+
+@app.get("/api/objectives_public")
+def get_objectives_public():
+    """Endpoint público (solo para desarrollo) que devuelve objetivos con descripción sin requerir autenticación."""
+    data = get_data()
+    objectives = data.get("objectives")
+    rows = []
+    cols = set(objectives.columns.tolist())
+    for _, row in objectives.iterrows():
+        rows.append({
+            "curso": row["ID"] if "ID" in cols else "",
+            "id_objetivo": row["ID_Objetivo"] if "ID_Objetivo" in cols else "",
+            "descripcion": row["Objetivo"] if "Objetivo" in cols else "",
+        })
+    return {"objectives": rows}
+
 # ── Taula ──────────────────────────────────────────────────────────────────────
 class ChatMessage(BaseModel):
     role: str
