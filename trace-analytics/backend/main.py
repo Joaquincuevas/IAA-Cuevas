@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List
+from contextlib import asynccontextmanager
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 import pandas as pd
@@ -11,6 +12,7 @@ from pathlib import Path
 import os
 import itertools
 from dotenv import load_dotenv
+from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre, generar_resumen_tributacion
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -20,6 +22,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
 DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx")))
+# Folder containing the Excel files (matrices + RA_Uandes)
+DATA_FOLDER = DATA_PATH.parent
 
 USERS = {
     "jjcuevas@miuandes.cl": {"password": "admin123", "name": "J. Cuevas", "role": "admin"},
@@ -44,7 +48,34 @@ PE_DOMAINS = [
     {"code": "PE6", "name": "Pensamiento crítico",    "description": "Evaluar y generar conocimiento de forma sistemática."},
 ]
 
-app = FastAPI(title="Trace Analytics API", version="0.4")
+# ── Matrices cache ─────────────────────────────────────────────────────────────
+_matrices_cache: dict | None = None
+
+def get_matrices() -> dict:
+    if _matrices_cache is None:
+        raise HTTPException(status_code=503, detail="Matrices de tributación no cargadas")
+    return _matrices_cache
+
+
+@asynccontextmanager
+async def lifespan(app_: FastAPI):
+    global _matrices_cache
+    try:
+        df_cursos, df_tributacion, df_competencias = parse_todas_las_matrices(DATA_FOLDER)
+        _matrices_cache = {
+            "cursos": df_cursos,
+            "tributacion": df_tributacion,
+            "competencias": df_competencias,
+        }
+        print(
+            f"Matrices cargadas: {len(df_cursos)} cursos, {len(df_tributacion)} tributaciones"
+        )
+    except Exception as e:
+        print(f"WARNING: No se pudieron cargar las matrices de tributación: {e}")
+    yield
+
+
+app = FastAPI(title="Trace Analytics API", version="0.5", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -262,6 +293,88 @@ def get_cobertura(carrera: Optional[str] = None, email: str = Depends(verify_tok
         "carreras": list(CARRERA_NAMES.keys()),
     }
 
+# ── Cobertura (matrices de tributación) ───────────────────────────────────────
+
+CARRERAS_MATRICES = ["ICA", "ICC", "ICE", "IOC", "ICI"]
+
+
+@app.get("/api/cobertura/heatmap")
+def get_heatmap(carrera: str, email: str = Depends(verify_token)):
+    if carrera not in CARRERAS_MATRICES:
+        raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
+    matrices = get_matrices()
+    df_tributacion: pd.DataFrame = matrices["tributacion"]
+    df_cursos: pd.DataFrame = matrices["cursos"]
+    df_competencias: pd.DataFrame = matrices["competencias"]
+
+    df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias)
+    if df_cob.empty:
+        raise HTTPException(status_code=404, detail=f"Sin datos para carrera {carrera}")
+
+    competencias = []
+    matriz = []
+    competencias_debiles = []
+
+    for _, row in df_cob.iterrows():
+        comp_id = int(row["competencia_id"])
+        pct = float(row["cobertura_pct"])
+        competencias.append({
+            "id": comp_id,
+            "texto_corto": row["competencia_texto_corto"],
+            "texto_completo": row["competencia_texto"],
+        })
+        matriz.append([int(row[f"semestre_{s}"]) for s in range(1, 11)])
+        if pct < 40:
+            competencias_debiles.append({
+                "id": comp_id,
+                "texto_corto": row["competencia_texto_corto"],
+                "pct": pct,
+            })
+
+    cobertura_global = round(float(df_cob["cobertura_pct"].mean()), 1)
+    total_cursos = int(df_cursos[df_cursos["carrera"] == carrera]["codigo"].nunique())
+
+    return {
+        "competencias": competencias,
+        "semestres": list(range(1, 11)),
+        "matriz": matriz,
+        "cobertura_global_pct": cobertura_global,
+        "competencias_debiles": competencias_debiles,
+        "total_cursos": total_cursos,
+    }
+
+
+@app.get("/api/cobertura/comparacion")
+def get_comparacion(email: str = Depends(verify_token)):
+    matrices = get_matrices()
+    df_tributacion: pd.DataFrame = matrices["tributacion"]
+    df_competencias: pd.DataFrame = matrices["competencias"]
+
+    result = {}
+    for carrera in CARRERAS_MATRICES:
+        df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias)
+        result[carrera] = round(float(df_cob["cobertura_pct"].mean()), 1) if not df_cob.empty else 0.0
+    return result
+
+
+@app.get("/api/cobertura/cursos")
+def get_cursos_competencia(carrera: str, competencia_id: int, email: str = Depends(verify_token)):
+    matrices = get_matrices()
+    df_tributacion: pd.DataFrame = matrices["tributacion"]
+
+    df = df_tributacion[
+        (df_tributacion["carrera"] == carrera)
+        & (df_tributacion["competencia_id"] == competencia_id)
+    ]
+    cursos = (
+        df[["codigo_curso", "nombre_curso", "semestre"]]
+        .drop_duplicates()
+        .sort_values("semestre")
+        .to_dict(orient="records")
+    )
+    return {"cursos": cursos}
+
+
 # ── Redundancia ────────────────────────────────────────────────────────────────
 @app.get("/api/redundancia")
 def get_redundancia(email: str = Depends(verify_token)):
@@ -401,6 +514,10 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
 
     data = get_data()
+    resumen_tributacion = ""
+    if _matrices_cache is not None:
+        resumen_tributacion = generar_resumen_tributacion(_matrices_cache["tributacion"])
+
     system_prompt = (
         "Eres Taula, asistente de inteligencia artificial de Trace Analytics, "
         "desarrollado para el Area Curricular de la Facultad de Ingenieria y Ciencias "
@@ -424,7 +541,16 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
         "- ICE: Ingenieria Civil Electrica\n"
         "- ICC: Ingenieria Civil en Computacion\n"
         "- ICA: Ingenieria Civil Ambiental\n\n"
-        "Responde siempre en espanol. Se analitico, preciso y util. "
+        + (
+            "=== MATRICES DE TRIBUTACION AL PERFIL DE EGRESO ===\n"
+            "Estos datos muestran qué cursos tributan a qué competencias del Perfil de Egreso (PE) por carrera.\n"
+            "Formato: S{semestre} {codigo} ({nombre}): PE [{ids de competencias}]\n\n"
+            + resumen_tributacion
+            + "\n\n"
+            if resumen_tributacion
+            else ""
+        )
+        + "Responde siempre en espanol. Se analitico, preciso y util. "
         "Cuando menciones cursos, incluye su ID y nombre completo."
     )
 

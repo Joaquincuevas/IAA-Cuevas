@@ -77,3 +77,26 @@ export async function taulaChat(message: string, history: { role: string; conten
     body: JSON.stringify({ message, history }),
   });
 }
+
+export type HeatmapData = {
+  competencias: { id: number; texto_corto: string; texto_completo: string }[];
+  semestres: number[];
+  matriz: number[][];
+  cobertura_global_pct: number;
+  competencias_debiles: { id: number; texto_corto: string; pct: number }[];
+  total_cursos: number;
+};
+
+export async function getCoberturaHeatmap(carrera: string) {
+  return apiFetch<HeatmapData>(`/api/cobertura/heatmap?carrera=${carrera}`);
+}
+
+export async function getCoberturaComparacion() {
+  return apiFetch<Record<string, number>>("/api/cobertura/comparacion");
+}
+
+export async function getCoberturaCursos(carrera: string, competenciaId: number) {
+  return apiFetch<{
+    cursos: { codigo_curso: string; nombre_curso: string; semestre: number }[];
+  }>(`/api/cobertura/cursos?carrera=${carrera}&competencia_id=${competenciaId}`);
+}
