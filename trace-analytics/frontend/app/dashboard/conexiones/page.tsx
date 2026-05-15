@@ -11,7 +11,7 @@ const CARRERAS = [
   { code: "ICC", label: "Informática" },
   { code: "ICE", label: "Eléctrica" },
   { code: "ICA", label: "Ambiental" },
-  { code: "ING", label: "Plan Común" },
+  { code: "ING", label: "General" },
 ];
 
 const CARRERA_COLORS: Record<string, string> = {
