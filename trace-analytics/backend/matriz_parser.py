@@ -13,9 +13,30 @@ CARRERA_FILES = {
 
 _CURSO_CODE_RE = re.compile(r"^[A-Z]{2,5}\d{3,4}")
 
+_STOP_WORDS = {
+    "a", "al", "con", "de", "del", "e", "el", "en", "es", "la", "las", "le",
+    "les", "lo", "los", "o", "para", "por", "que", "se", "si", "su", "sus",
+    "un", "una", "y", "ya",
+}
+
+
+def generar_texto_corto(texto: str, n_significant: int = 5) -> str:
+    """Return the first n_significant non-stopword words, including connecting words."""
+    words = texto.split()
+    result: list[str] = []
+    sig_count = 0
+    for word in words:
+        clean = re.sub(r"[.,;:()\[\]]+", "", word).lower()
+        result.append(word)
+        if clean and clean not in _STOP_WORDS:
+            sig_count += 1
+        if sig_count >= n_significant:
+            break
+    return " ".join(result)
+
 
 def _parse_semestre(val) -> int | None:
-    """Extract integer semestre 1-10 from cell value. Returns None if invalid."""
+    """Extract first integer from cell value. Returns None for empty/asterisk."""
     if val is None:
         return None
     if isinstance(val, float) and pd.isna(val):
@@ -23,10 +44,10 @@ def _parse_semestre(val) -> int | None:
     s = str(val).strip()
     if not s or s in ("*", "nan"):
         return None
-    m = re.match(r"^(\d+)", s)
-    if m:
-        n = int(m.group(1))
-        if 1 <= n <= 10:
+    nums = re.findall(r"\d+", s)
+    if nums:
+        n = int(nums[0])
+        if n >= 1:
             return n
     return None
 
@@ -49,9 +70,8 @@ def parse_matriz_tributacion(
         df_tributacion:  [codigo_curso, nombre_curso, semestre, carrera,
                           competencia_id, competencia_texto, tributa]
                          One row per (curso, competencia) where tributa=True.
-        df_competencias: [carrera, competencia_id, competencia_texto]
-                         Full list of PE competencias defined in the file header,
-                         including those with zero tributations.
+        df_competencias: [carrera, competencia_id, competencia_texto, texto_corto]
+                         All PE competencias including those with zero tributations.
     """
     filepath = Path(filepath)
     df_raw = pd.read_excel(filepath, header=None)
@@ -106,8 +126,15 @@ def parse_matriz_tributacion(
     df_cursos = pd.DataFrame(cursos_rows) if cursos_rows else _empty_cursos
     df_tributacion = pd.DataFrame(tributacion_rows) if tributacion_rows else _empty_trib
     df_competencias = pd.DataFrame(
-        [{"carrera": carrera_code, "competencia_id": cid, "competencia_texto": ctxt}
-         for cid, ctxt in competencias.items()]
+        [
+            {
+                "carrera": carrera_code,
+                "competencia_id": cid,
+                "competencia_texto": ctxt,
+                "texto_corto": generar_texto_corto(ctxt),
+            }
+            for cid, ctxt in competencias.items()
+        ]
     )
 
     return df_cursos, df_tributacion, df_competencias
@@ -135,10 +162,12 @@ def parse_todas_las_matrices(
         all_cursos.append(df_cursos)
         all_tributacion.append(df_tributacion)
         all_competencias.append(df_competencias)
+        max_sem = int(df_cursos["semestre"].max()) if not df_cursos.empty else 0
         print(
             f"  {carrera_code}: {len(df_cursos)} cursos, "
             f"{len(df_tributacion)} tributaciones, "
-            f"{len(df_competencias)} competencias PE"
+            f"{len(df_competencias)} competencias PE, "
+            f"semestre máx={max_sem}"
         )
 
     df_all_cursos = pd.concat(all_cursos, ignore_index=True) if all_cursos else pd.DataFrame()
@@ -155,42 +184,40 @@ def calcular_cobertura_por_semestre(
     df_tributacion: pd.DataFrame,
     carrera: str,
     df_competencias: pd.DataFrame | None = None,
+    max_sem: int = 10,
 ) -> pd.DataFrame:
     """Return coverage matrix for one carrera.
 
     Columns: competencia_id, competencia_texto_corto, competencia_texto,
-             semestre_1 … semestre_10, cobertura_pct
+             semestre_1 … semestre_{max_sem}, cobertura_pct
     semestre_N = number of distinct courses in that semester that tribute.
-    cobertura_pct = % of semesters 1-10 with at least 1 course.
-
-    If df_competencias is provided, all PE competencias defined in the Excel header
-    are included (even those with 0 tributations).
+    cobertura_pct = % of semesters 1-max_sem with at least 1 course.
     """
     df = df_tributacion[df_tributacion["carrera"] == carrera].copy()
 
     if df_competencias is not None and not df_competencias.empty:
-        competencias = (
-            df_competencias[df_competencias["carrera"] == carrera][["competencia_id", "competencia_texto"]]
-            .drop_duplicates()
-            .sort_values("competencia_id")
-        )
+        comp_df = df_competencias[df_competencias["carrera"] == carrera].drop_duplicates(
+            subset=["competencia_id"]
+        ).sort_values("competencia_id")
     elif df.empty:
         return pd.DataFrame()
     else:
-        competencias = (
+        comp_df = (
             df[["competencia_id", "competencia_texto"]]
             .drop_duplicates()
             .sort_values("competencia_id")
         )
 
+    has_texto_corto = "texto_corto" in comp_df.columns
+
     rows: list[dict] = []
-    for _, comp in competencias.iterrows():
+    for _, comp in comp_df.iterrows():
         comp_id = comp["competencia_id"]
         texto = comp["competencia_texto"]
-        texto_corto = texto[:35] + "..." if len(texto) > 35 else texto
+        texto_corto = comp["texto_corto"] if has_texto_corto else generar_texto_corto(texto)
 
-        comp_df = df[df["competencia_id"] == comp_id]
-        sem_counts = comp_df.groupby("semestre")["codigo_curso"].nunique()
+        comp_trib = df[df["competencia_id"] == comp_id]
+        sem_counts = comp_trib.groupby("semestre")["codigo_curso"].nunique()
 
         row: dict = {
             "competencia_id": comp_id,
@@ -198,21 +225,19 @@ def calcular_cobertura_por_semestre(
             "competencia_texto": texto,
         }
         cubiertos = 0
-        for sem in range(1, 11):
+        for sem in range(1, max_sem + 1):
             count = int(sem_counts.get(sem, 0))
             row[f"semestre_{sem}"] = count
             if count > 0:
                 cubiertos += 1
 
-        row["cobertura_pct"] = round(cubiertos / 10 * 100, 1)
+        row["cobertura_pct"] = round(cubiertos / max_sem * 100, 1)
         rows.append(row)
 
     return pd.DataFrame(rows)
 
 
-def generar_resumen_tributacion(
-    df_tributacion: pd.DataFrame,
-) -> str:
+def generar_resumen_tributacion(df_tributacion: pd.DataFrame) -> str:
     """Generate a compact text summary for the Taula system prompt."""
     if df_tributacion.empty:
         return "No hay datos de tributación disponibles."
@@ -240,8 +265,18 @@ if __name__ == "__main__":
     print(f"Total tributaciones: {len(df_tributacion)}")
     print("\nCobertura por carrera:")
     for carrera in ["ICA", "ICC", "ICE", "IOC", "ICI"]:
-        df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias)
+        carrera_cursos = df_cursos[df_cursos["carrera"] == carrera]
+        max_sem = int(carrera_cursos["semestre"].max()) if not carrera_cursos.empty else 10
+        df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias, max_sem=max_sem)
         if not df_cob.empty:
             global_pct = round(df_cob["cobertura_pct"].mean(), 1)
             n_zero = int((df_cob["cobertura_pct"] == 0).sum())
-            print(f"  {carrera}: {len(df_cob)} competencias PE, cobertura global {global_pct}%, {n_zero} sin tributación")
+            print(
+                f"  {carrera}: {len(df_cob)} PE, semestres 1-{max_sem}, "
+                f"cobertura {global_pct}%, {n_zero} sin tributación"
+            )
+    print("\nEjemplos texto_corto:")
+    for carrera in ["ICA", "ICI"]:
+        df_comp = df_competencias[df_competencias["carrera"] == carrera].head(3)
+        for _, r in df_comp.iterrows():
+            print(f"  [{carrera} PE{r['competencia_id']}] {r['texto_corto']}")

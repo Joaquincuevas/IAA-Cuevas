@@ -100,3 +100,16 @@ export async function getCoberturaCursos(carrera: string, competenciaId: number)
     cursos: { codigo_curso: string; nombre_curso: string; semestre: number }[];
   }>(`/api/cobertura/cursos?carrera=${carrera}&competencia_id=${competenciaId}`);
 }
+
+export type TributacionCompetencia = {
+  competencia_id: number;
+  texto_corto: string;
+  texto_completo: string;
+  cursos: { codigo_curso: string; nombre_curso: string; semestre: number }[];
+};
+
+export async function getCoberturaTributaciones(carrera: string) {
+  return apiFetch<{ competencias: TributacionCompetencia[] }>(
+    `/api/cobertura/tributaciones?carrera=${carrera}`
+  );
+}

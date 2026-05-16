@@ -298,6 +298,11 @@ def get_cobertura(carrera: Optional[str] = None, email: str = Depends(verify_tok
 CARRERAS_MATRICES = ["ICA", "ICC", "ICE", "IOC", "ICI"]
 
 
+def _max_sem_para_carrera(df_cursos: pd.DataFrame, carrera: str) -> int:
+    c = df_cursos[df_cursos["carrera"] == carrera]
+    return int(c["semestre"].max()) if not c.empty else 10
+
+
 @app.get("/api/cobertura/heatmap")
 def get_heatmap(carrera: str, email: str = Depends(verify_token)):
     if carrera not in CARRERAS_MATRICES:
@@ -307,7 +312,8 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
     df_cursos: pd.DataFrame = matrices["cursos"]
     df_competencias: pd.DataFrame = matrices["competencias"]
 
-    df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias)
+    max_sem = _max_sem_para_carrera(df_cursos, carrera)
+    df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias, max_sem=max_sem)
     if df_cob.empty:
         raise HTTPException(status_code=404, detail=f"Sin datos para carrera {carrera}")
 
@@ -323,7 +329,7 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
             "texto_corto": row["competencia_texto_corto"],
             "texto_completo": row["competencia_texto"],
         })
-        matriz.append([int(row[f"semestre_{s}"]) for s in range(1, 11)])
+        matriz.append([int(row[f"semestre_{s}"]) for s in range(1, max_sem + 1)])
         if pct < 40:
             competencias_debiles.append({
                 "id": comp_id,
@@ -336,7 +342,7 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
 
     return {
         "competencias": competencias,
-        "semestres": list(range(1, 11)),
+        "semestres": list(range(1, max_sem + 1)),
         "matriz": matriz,
         "cobertura_global_pct": cobertura_global,
         "competencias_debiles": competencias_debiles,
@@ -348,13 +354,49 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
 def get_comparacion(email: str = Depends(verify_token)):
     matrices = get_matrices()
     df_tributacion: pd.DataFrame = matrices["tributacion"]
+    df_cursos: pd.DataFrame = matrices["cursos"]
     df_competencias: pd.DataFrame = matrices["competencias"]
 
     result = {}
     for carrera in CARRERAS_MATRICES:
-        df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias)
+        max_sem = _max_sem_para_carrera(df_cursos, carrera)
+        df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias, max_sem=max_sem)
         result[carrera] = round(float(df_cob["cobertura_pct"].mean()), 1) if not df_cob.empty else 0.0
     return result
+
+
+@app.get("/api/cobertura/tributaciones")
+def get_tributaciones(carrera: str, email: str = Depends(verify_token)):
+    """All PE competencias with their full course list for the detail view."""
+    if carrera not in CARRERAS_MATRICES:
+        raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
+    matrices = get_matrices()
+    df_tributacion: pd.DataFrame = matrices["tributacion"]
+    df_competencias: pd.DataFrame = matrices["competencias"]
+
+    df_comp = (
+        df_competencias[df_competencias["carrera"] == carrera]
+        .drop_duplicates(subset=["competencia_id"])
+        .sort_values("competencia_id")
+    )
+    df_trib = df_tributacion[df_tributacion["carrera"] == carrera]
+
+    result = []
+    for _, comp in df_comp.iterrows():
+        comp_id = int(comp["competencia_id"])
+        cursos_df = (
+            df_trib[df_trib["competencia_id"] == comp_id][["codigo_curso", "nombre_curso", "semestre"]]
+            .drop_duplicates()
+            .sort_values("semestre")
+        )
+        result.append({
+            "competencia_id": comp_id,
+            "texto_corto": comp["texto_corto"],
+            "texto_completo": comp["competencia_texto"],
+            "cursos": cursos_df.to_dict(orient="records"),
+        })
+
+    return {"competencias": result}
 
 
 @app.get("/api/cobertura/cursos")
