@@ -103,7 +103,7 @@ export default function TaulaPage() {
           </div>
           <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-4 py-3">
             <p className="text-[13px] text-[#111827] leading-relaxed">
-              Hola {initial}. Soy Taula, tu asistente curricular. Puedo ayudarte a explorar conexiones
+              Hola Joaquín. Soy Taula, tu asistente curricular. Puedo ayudarte a explorar conexiones
               entre cursos, evaluar cobertura del perfil de egreso, detectar redundancias y responder
               preguntas sobre los 672 objetivos de aprendizaje de Ingeniería UAndes. ¿Por dónde partimos?
             </p>
