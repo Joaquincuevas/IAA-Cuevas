@@ -30,18 +30,13 @@ docker compose logs -f backend
 
 Variables de entorno
 - `NEXT_PUBLIC_API_BASE_URL`: URL base que usa el frontend para llamar al API (por defecto `http://localhost:8000` cuando se ejecuta localmente con compose).
-- `DATA_PATH` (si está definido en `docker-compose.yml`): ruta al archivo Excel con los datos (ej. `./data/RA_UandesFunctional.xlsx`). Asegúrate de que el archivo de datos esté en la ruta que monta el contenedor.
+- `DATA_PATH` (Está definido en `docker-compose.yml`): ruta al archivo Excel con los datos (ej. `./data/RA_UandesFunctional.xlsx`). Asegúrate de que el archivo de datos esté en la ruta que monta el contenedor.
 
 Endpoints útiles
 - Frontend: http://localhost:3000 (interfaz Next.js)
 - Backend (FastAPI): http://localhost:8000
 - Docs de API: http://localhost:8000/docs
 
-Obtener un token (ejemplo curl)
-
-```bash
-curl -s -X POST "http://localhost:8000/api/auth/login" -H "Content-Type: application/json" -d '{"username":"admin","password":"admin"}'
-```
 
 Parar y remover contenedores
 
