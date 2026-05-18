@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
@@ -208,11 +210,9 @@ def get_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_to
 
     rows.sort(key=lambda x: x["total_conexiones"], reverse=True)
 
+    # Stats are computed on the full filtered set (before pagination)
     filtered_nodes = [r["id"] for r in rows]
-    sub_edges = sum(
-        1 for u, v in G.edges()
-        if u in filtered_nodes and v in filtered_nodes
-    )
+    sub_edges = sum(1 for u, v in G.edges() if u in filtered_nodes and v in filtered_nodes)
     hub_courses = sum(1 for r in rows if r["alimenta_a"] > 5)
     orphan_courses = sum(1 for r in rows if r["recibe_de"] == 0 and r["alimenta_a"] == 0)
 
@@ -437,6 +437,8 @@ def get_redundancia(email: str = Depends(verify_token)):
     linked_objs = set(ra_links["ID_Objetivo"].tolist())
     orphans_count = len(all_obj_ids - linked_objs)
     overcovered_count = len(counts)
+    total_ras = len(all_obj_ids)
+    redundancy_pct = round((overcovered_count / total_ras) * 100, 1) if total_ras > 0 else 0.0
 
     clusters = []
     if not counts.empty:
@@ -498,14 +500,46 @@ def get_redundancia(email: str = Depends(verify_token)):
 
         clusters.sort(key=lambda x: x["overlap"], reverse=True)
 
+    # Build explicit lists for UI
+    # Overcovered RAs: ID_Objetivo, Cursos_Demandantes (count), Cursos_Lista, Descripcion
+    overcovered_list = []
+    if not counts.empty:
+        # counts: dataframe with columns ['obj_id', 'course_set'] where course_set is a set
+        for _, row in counts.iterrows():
+            obj_id = row["obj_id"]
+            course_set = row["course_set"]
+            descripcion = ""
+            try:
+                descripcion = objectives[objectives["ID_Objetivo"] == obj_id]["Objetivo"].dropna().astype(str).iloc[0]
+            except Exception:
+                descripcion = ""
+            overcovered_list.append({
+                "id_objetivo": obj_id,
+                "cursos_demandantes": len(course_set),
+                "cursos_lista": sorted(list(course_set)),
+                "descripcion": descripcion,
+            })
+
+    # Orphan RAs: ids with no links
+    orphan_list = []
+    if orphans_count > 0:
+        for oid in sorted(list(all_obj_ids - linked_objs)):
+            descripcion = ""
+            try:
+                descripcion = objectives[objectives["ID_Objetivo"] == oid]["Objetivo"].dropna().astype(str).iloc[0]
+            except Exception:
+                descripcion = ""
+            orphan_list.append({"id_objetivo": oid, "descripcion": descripcion})
+
     return {
-        "clusters": clusters[:5],
-        "stats": {
-            "clusters_detectados": len(clusters),
-            "horas_duplicadas": overcovered_count * 2,
-            "ras_huerfanos": orphans_count,
+        "kpi": {
+            "tasa_redundancia_pct": redundancy_pct,
+            "total_ras": total_ras,
             "ras_sobre_cubiertos": overcovered_count,
+            "ras_huerfanos": orphans_count,
         },
+        "overcovered": sorted(overcovered_list, key=lambda x: x["cursos_demandantes"], reverse=True),
+        "orphans": orphan_list,
     }
 
 
@@ -517,12 +551,33 @@ def get_objectives(email: str = Depends(verify_token)):
     rows = []
     cols = set(objectives.columns.tolist())
     for _, row in objectives.iterrows():
+        # Coerce values to strings and guard against NaN/inf
+        curso = ""
+        id_obj = ""
+        desc = ""
+        try:
+            if "ID" in cols and not pd.isna(row["ID"]):
+                curso = str(row["ID"]).strip()
+        except Exception:
+            curso = ""
+        try:
+            if "ID_Objetivo" in cols and not pd.isna(row["ID_Objetivo"]):
+                id_obj = str(row["ID_Objetivo"]).strip()
+        except Exception:
+            id_obj = ""
+        try:
+            if "Objetivo" in cols and not pd.isna(row["Objetivo"]):
+                desc = str(row["Objetivo"]).strip()
+        except Exception:
+            desc = ""
+
         rows.append({
-            "curso": row["ID"] if "ID" in cols else "",
-            "id_objetivo": row["ID_Objetivo"] if "ID_Objetivo" in cols else "",
-            "descripcion": row["Objetivo"] if "Objetivo" in cols else "",
+            "curso": curso,
+            "id_objetivo": id_obj,
+            "descripcion": desc,
         })
-    return {"objectives": rows}
+    # Use jsonable_encoder to convert numpy / pandas types safely
+    return JSONResponse(content=jsonable_encoder({"objectives": rows}))
 
 
 @app.get("/api/objectives_public")

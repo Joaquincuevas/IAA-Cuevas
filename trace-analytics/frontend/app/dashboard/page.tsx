@@ -119,23 +119,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Actividad reciente */}
-      <div>
-        <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-3">Actividad reciente</p>
-        <div className="border border-[#E5E7EB] rounded-xl divide-y divide-[#E5E7EB]">
-          {ACTIVITY.map((a, i) => (
-            <div key={i} className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-3">
-                <span className="text-[14px]">{a.icon}</span>
-                <p className="text-[12px] text-[#6B7280]">
-                  <span className="font-medium text-[#111827]">{a.actor}</span> · {a.action}
-                </p>
-              </div>
-              <span className="text-[11px] text-[#9CA3AF] flex-shrink-0 ml-4">{a.time}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Actividad reciente removida */}
     </div>
   );
 }

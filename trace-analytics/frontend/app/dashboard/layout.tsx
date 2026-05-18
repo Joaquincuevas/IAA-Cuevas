@@ -9,7 +9,8 @@ import { isAuthenticated, getUser, clearAuth } from "@/lib/auth";
 const NAV = [
   { href: "/dashboard", label: "Inicio", icon: Home },
   { href: "/dashboard/conexiones", label: "Conexiones", icon: Network },
-  { href: "/dashboard/cobertura", label: "Cobertura", icon: BookOpen },
+    { href: "/dashboard/cobertura", label: "Cobertura", icon: BookOpen },
+    { href: "/dashboard/objetivos", label: "Objetivos", icon: BookOpen },
   { href: "/dashboard/redundancia", label: "Redundancia", icon: GitBranch },
   { href: "/dashboard/taula", label: "Taula", icon: Sparkles, badge: true },
 ];
@@ -29,7 +30,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   function handleLogout() {
     clearAuth();
-    router.push("/login");
+    router.replace("/login");
+    if (typeof window !== "undefined") window.location.reload();
   }
 
   if (!user) return null;

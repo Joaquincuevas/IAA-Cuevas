@@ -47,6 +47,12 @@ export async function getConexiones(carrera?: string) {
   }>(`/api/conexiones${q}`);
 }
 
+export async function getObjectives() {
+  return apiFetch<{ objectives: { curso: string; id_objetivo: string; descripcion: string }[] }>(
+    "/api/objectives"
+  );
+}
+
 export async function getCobertura(carrera?: string) {
   const q = carrera ? `?carrera=${carrera}` : "";
   return apiFetch<{
@@ -59,15 +65,9 @@ export async function getCobertura(carrera?: string) {
 
 export async function getRedundancia() {
   return apiFetch<{
-    clusters: {
-      id: string; nombre: string; severidad: string; overlap: number;
-      cursos: { id: string; nombre: string }[];
-      total_objetivos: number; total_cursos: number;
-    }[];
-    stats: {
-      clusters_detectados: number; horas_duplicadas: number;
-      ras_huerfanos: number; ras_sobre_cubiertos: number;
-    };
+    kpi: { tasa_redundancia_pct: number; total_ras: number; ras_sobre_cubiertos: number; ras_huerfanos: number };
+    overcovered: { id_objetivo: string; cursos_demandantes: number; cursos_lista: string[]; descripcion: string }[];
+    orphans: { id_objetivo: string; descripcion: string }[];
   }>("/api/redundancia");
 }
 

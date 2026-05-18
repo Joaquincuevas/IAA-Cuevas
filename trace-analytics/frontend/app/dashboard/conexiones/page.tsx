@@ -34,6 +34,7 @@ type Stats = {
 
 export default function ConexionesPage() {
   const [data, setData] = useState<{ cursos: Curso[]; stats: Stats } | null>(null);
+  const [selectedCurso, setSelectedCurso] = useState<string | null>(null);
   const [selectedCarrera, setSelectedCarrera] = useState("Todas");
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
@@ -43,7 +44,7 @@ export default function ConexionesPage() {
     const carrera = selectedCarrera === "Todas" ? undefined : selectedCarrera;
     setLoading(true);
     getConexiones(carrera)
-      .then(setData)
+      .then((res) => setData({ cursos: res.cursos, stats: res.stats }))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [selectedCarrera]);
@@ -125,7 +126,7 @@ export default function ConexionesPage() {
       <div className="border border-[#E5E7EB] rounded-xl overflow-hidden">
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
+              <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
               <th className="text-left px-4 py-3 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase w-24">ID</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase">NOMBRE</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase w-28">CARRERA</th>
@@ -140,24 +141,25 @@ export default function ConexionesPage() {
                   <ChevronDown size={12} className={sortDir === "asc" ? "rotate-180" : ""} />
                 </span>
               </th>
+              <th className="text-right px-4 py-3 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase w-32">OBJETIVOS</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+              {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-[#9CA3AF] text-[13px]">
+                <td colSpan={7} className="text-center py-12 text-[#9CA3AF] text-[13px]">
                   Cargando…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-[#9CA3AF] text-[13px]">
+                <td colSpan={7} className="text-center py-12 text-[#9CA3AF] text-[13px]">
                   No se encontraron cursos
                 </td>
               </tr>
             ) : (
               filtered.map((curso) => (
-                <tr key={curso.id} className="border-b border-[#E5E7EB] hover:bg-[#F9FAFB] transition-colors">
+                  <tr key={curso.id} className="border-b border-[#E5E7EB] hover:bg-[#F9FAFB] transition-colors">
                   <td className="px-4 py-3 font-mono text-[12px] text-[#1B2A4A]">{curso.id}</td>
                   <td className="px-4 py-3 text-[#111827]">{curso.nombre}</td>
                   <td className="px-4 py-3">
@@ -170,12 +172,53 @@ export default function ConexionesPage() {
                   </td>
                   <td className="px-4 py-3 text-right text-[#6B7280]">{curso.recibe_de}</td>
                   <td className="px-4 py-3 text-right text-[#6B7280]">{curso.alimenta_a}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-[#111827]">{curso.total_conexiones}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-[#111827]">
+                    <div>{curso.total_conexiones}</div>
+                  </td>
+                  <td className="px-4 py-3 text-right w-28">
+                    <button onClick={() => setSelectedCurso(curso.id)} className="text-sm text-[#1B2A4A] underline">Ver objetivos</button>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination removed - full list returned by API */}
+
+      {selectedCurso && <ObjetivosModal cursoId={selectedCurso} onClose={() => setSelectedCurso(null)} />}
+    </div>
+  );
+}
+
+function ObjetivosModal({ cursoId, onClose }: { cursoId: string; onClose: () => void }) {
+  const [items, setItems] = useState<{ curso: string; id_objetivo: string; descripcion: string }[] | null>(null);
+  useEffect(() => {
+    import("@/lib/api").then(({ getObjectives }) => getObjectives().then((r) => setItems(r.objectives.filter((o: any) => o.curso === cursoId))).catch(console.error));
+  }, [cursoId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+      <div className="bg-white rounded-xl w-3/5 max-h-[80vh] overflow-auto p-6 border border-[#E5E7EB]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[18px] font-bold text-[#111827]">Objetivos para {cursoId}</h3>
+          <button onClick={onClose} className="text-[13px] text-[#6B7280]">Cerrar</button>
+        </div>
+        {!items ? (
+          <p className="text-[13px] text-[#6B7280]">Cargando...</p>
+        ) : items.length === 0 ? (
+          <p className="text-[13px] text-[#6B7280]">No se encontraron objetivos para este curso.</p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((it) => (
+              <div key={it.id_objetivo} className="p-3 border rounded">
+                <p className="font-mono text-[12px] text-[#1B2A4A] mb-1">{it.id_objetivo}</p>
+                <p className="text-[13px] text-[#111827]">{it.descripcion}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
