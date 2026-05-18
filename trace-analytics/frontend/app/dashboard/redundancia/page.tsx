@@ -56,7 +56,7 @@ export default function RedundanciaPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard label="TASA DE REDUNDANCIA (3+ cursos)" value={`${kpi?.tasa_redundancia_pct ?? 0}%`} sub={`RAs sobre-cubiertos ${kpi?.ras_sobre_cubiertos ?? 0} / ${kpi?.total_ras ?? 0}`} dotColor="#EF4444" />
         <StatCard label="RAS SOBRE-CUBIERTOS" value={kpi?.ras_sobre_cubiertos ?? 0} sub="3+ cursos" dotColor="#6B7280" />
-        <StatCard label="RAS HUÉRFANOS" value={kpi?.ras_huerfanos ?? 0} sub="Sin curso que los aborde" dotColor="#EF4444" />
+        <StatCard label="CANTIDAD RAs HUÉRFANOS" value={kpi?.ras_huerfanos ?? 0} sub="Sin curso que los aborde" dotColor="#EF4444" />
       </div>
 
       {/* Overcovered RAs */}
