@@ -83,7 +83,7 @@ export default function AnimatedGraph() {
     const py = NODES.map(n => n.by);
 
     function frame() {
-      t += 0.010; // faster movement
+      t += 0.022;
 
       NODES.forEach((n, i) => {
         px[i] = n.bx + Math.sin(t * n.speed + n.phase) * n.amp;
