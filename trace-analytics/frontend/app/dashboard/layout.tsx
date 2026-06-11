@@ -38,9 +38,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex h-screen overflow-hidden bg-white">
       {/* Sidebar */}
-      <aside className="w-[150px] flex-shrink-0 flex flex-col border-r border-[#E5E7EB] py-5 px-3">
+      <aside className="w-[150px] flex-shrink-0 flex flex-col border-r border-[#E5E7EB] py-5 px-3 h-full">
         <div className="mb-6 px-2">
           <p className="text-[12px] font-bold text-[#111827] leading-tight">Trace Analytics</p>
           <p className="text-[10px] text-[#9CA3AF] mt-0.5">powered by Taula</p>
@@ -84,7 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto h-full">{children}</main>
     </div>
   );
 }
