@@ -55,7 +55,7 @@ export default function LandingPage() {
           </div>
 
           {/* Animated graph */}
-          <div className="flex-shrink-0 w-80 h-64 relative">
+          <div className="flex-shrink-0 w-[520px] h-[520px] relative">
             <AnimatedGraph />
           </div>
         </div>
