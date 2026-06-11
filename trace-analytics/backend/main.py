@@ -654,85 +654,79 @@ class ChatRequest(BaseModel):
     history: List[ChatMessage] = []
 
 
+def _compact_ra_summary(df_objectives: pd.DataFrame, df_ra_links: pd.DataFrame) -> str:
+    """One line per course: CURSO (NOMBRE): RA1:A, RA2:M, RA3:B (A=Alta M=Media B=Baja)."""
+    imp_order = {"Alta": 3, "Media": 2, "Baja": 1}
+    if df_ra_links.empty:
+        return ""
+    max_imp = (
+        df_ra_links.groupby("ID_Objetivo")["Importancia"]
+        .apply(lambda x: max(x, key=lambda v: imp_order.get(v, 0)))
+        .reset_index()
+    )
+    max_imp.columns = ["ID_Objetivo", "MaxImp"]
+    merged = df_objectives[["ID", "ID_Objetivo", "Nombre"]].merge(max_imp, on="ID_Objetivo", how="left")
+    merged["MaxImp"] = merged["MaxImp"].fillna("Baja")
+    lines = []
+    for curso_id, grp in merged.groupby("ID"):
+        nombre = grp["Nombre"].iloc[0][:22]
+        ras = ", ".join(
+            f"{row['ID_Objetivo'].split('-')[-1]}:{row['MaxImp'][0]}"
+            for _, row in grp.iterrows()
+        )
+        lines.append(f"{curso_id} ({nombre}): {ras}")
+    return "\n".join(lines)
+
+
 def build_taula_system_prompt(
     resumen_matrices: str,
-    df_objectives_str: str,
-    df_ra_links_str: str,
+    ra_summary: str,
     stats: dict,
 ) -> str:
     return f"""Eres Taula, el asistente de inteligencia curricular de la Facultad de Ingeniería de la Universidad de los Andes.
 
-## Programas que conoces
+## Programas
 IOC (Obras Civiles), ICI (Civil), ING (Industrial), ICE (Eléctrica), ICC (Computación), ICA (Ambiental).
 
-## Datos disponibles
-- {stats.get('n_cursos', 139)} cursos, {stats.get('n_objetivos', 672)} objetivos de aprendizaje, {stats.get('n_links', 925)} vínculos RA↔curso
-- 195 prerrequisitos de malla
-- 5 Matrices de Tributación que mapean RAs al Perfil de Egreso
+## Estadísticas
+{stats.get('n_cursos', 139)} cursos · {stats.get('n_objetivos', 672)} RAs · {stats.get('n_links', 925)} vínculos RA↔prerrequisito
 
-## Niveles de tributación (CRÍTICO)
-- **a**: introducción al tema (Importancia Baja)
-- **b**: desarrollo/aplicación (Importancia Media)
-- **c**: dominio completo (Importancia Alta) — el ÚNICO nivel que cuenta para cobertura del Perfil de Egreso
+## Niveles de tributación
+A=Alta (dominio pleno, cuenta para cobertura PE) · M=Media (desarrollo) · B=Baja (introducción)
 
-## Cómo responder preguntas de cobertura
-Cuando te pregunten qué cursos cubren una competencia PE:
-1. Busca en las matrices de tributación los cursos asociados a esa competencia
-2. Identifica el semestre en que ocurre la cobertura
-3. Si la competencia tiene nivel "c" (X en las matrices actuales), es considerada cubierta
-4. Si no hay cursos tributando, indica que la competencia tiene cobertura incompleta
+## Cobertura real por carrera
+- ICA (Ambiental): 78.3% — 18/23 PEs con nivel Alta
+- ICC (Computación): 78.9% — 15/19 PEs con nivel Alta
+- ICE (Eléctrica): 81.0% — 17/21 PEs con nivel Alta
+- IOC (Obras Civiles): 75.9% — 22/29 PEs con nivel Alta
+- ICI (Civil): 81.0% — 17/21 PEs con nivel Alta
+PE1–PE4 sin cobertura Alta en todas las carreras (competencias transversales humanísticas — esperado).
 
-## Cómo responder preguntas de redundancia
-Un RA es redundante si aparece en ≥3 cursos con el mismo nivel de Importancia sin progresar a un nivel superior.
-Una repetición CON progresión (Baja→Media→Alta) es deseable, no es redundancia.
+## Reglas de análisis
+- Redundancia: RA en ≥3 cursos con el MISMO nivel sin progresión. Progresión B→M→A es deseable.
+- Cobertura PE: solo cuentan RAs de nivel Alta. Media y Baja son formación previa.
+- Responde siempre en español, código de curso exacto (ej: ICA3102), conciso.
 
-## Relación RA → Perfil de Egreso (datos reales)
-El cruce de los 3 archivos de datos produce ~2314 vínculos RA→PE.
-Cobertura por carrera (RAs de nivel Alta que cubren PEs):
-- ICA (Ambiental): 78.3% — 18/23 PEs cubiertas
-- ICC (Computación): 78.9% — 15/19 PEs cubiertas
-- ICE (Eléctrica): 81.0% — 17/21 PEs cubiertas
-- IOC (Obras Civiles): 75.9% — 22/29 PEs cubiertas
-- ICI (Industrial): 81.0% — 17/21 PEs cubiertas
-
-PEs sin cobertura Alta en todas las carreras: PE1-PE4 (competencias humanísticas/valóricas).
-Esto es ESPERADO porque estas competencias se trabajan de forma transversal,
-no a través de RAs técnicos específicos.
-
-Cuando pregunten por una PE específica, menciona:
-1. Si está cubierta (tiene ≥1 RA de nivel Alta) o no
-2. Cuántos RAs de cada nivel la trabajan
-3. Los cursos principales que la cubren con nivel Alta
-
-## Formato de respuesta
-- Usa códigos de curso exactos (ej: IIC2100, IIN3400, ICA3102)
-- Responde siempre en español
-- Sé conciso: primero la respuesta directa, luego el detalle si es necesario
-- Si no tienes suficiente información para responder con certeza, dilo explícitamente
-
-## Dataset completo
-### Matrices de Tributación por Carrera:
+## Matrices de Tributación (curso → PEs que cubre)
 {resumen_matrices if resumen_matrices else "No disponible."}
 
-### Objetivos de Aprendizaje:
-{df_objectives_str}
-
-### Vínculos RA↔Curso (Importancia: Alta=c, Media=b, Baja=a):
-{df_ra_links_str}
+## RAs por curso (número:nivel)
+{ra_summary if ra_summary else "No disponible."}
 """
 
 
 @app.post("/api/taula/chat")
 def chat(req: ChatRequest, email: str = Depends(verify_token)):
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     data = get_data()
     resumen_tributacion = ""
     if _matrices_cache is not None:
         resumen_tributacion = generar_resumen_tributacion(_matrices_cache["tributacion"])
 
+    ra_summary = _compact_ra_summary(data["objectives"], data["ra_links"])
     stats = {
         "n_cursos": len(data["general"]),
         "n_objetivos": len(data["objectives"]),
@@ -740,32 +734,27 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
     }
     system_prompt = build_taula_system_prompt(
         resumen_matrices=resumen_tributacion,
-        df_objectives_str=data["objectives"].to_string(index=False),
-        df_ra_links_str=data["ra_links"].to_string(index=False),
+        ra_summary=ra_summary,
         stats=stats,
     )
 
     try:
-        from google import genai
-        from google.genai import types as genai_types
+        from groq import Groq
 
-        client = genai.Client(api_key=api_key)
+        client = Groq(api_key=api_key)
 
-        history = [
-            genai_types.Content(
-                role=msg.role,
-                parts=[genai_types.Part(text=msg.content)],
-            )
-            for msg in req.history
-        ]
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        for msg in req.history:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": req.message})
 
-        chat_session = client.chats.create(
-            model="gemini-2.0-flash",
-            config=genai_types.GenerateContentConfig(system_instruction=system_prompt),
-            history=history,
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=1024,
         )
-        response = chat_session.send_message(req.message)
-        return {"reply": response.text}
+        return {"reply": completion.choices[0].message.content}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
