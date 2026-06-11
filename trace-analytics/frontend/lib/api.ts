@@ -113,3 +113,35 @@ export async function getCoberturaTributaciones(carrera: string) {
     `/api/cobertura/tributaciones?carrera=${carrera}`
   );
 }
+
+export type PESummaryItem = {
+  alta: number;
+  media: number;
+  baja: number;
+  cubierta: boolean;
+  descripcion: string;
+};
+
+export type RAMapping = {
+  ra_id: string;
+  ra_texto: string;
+  ra_texto_completo: string;
+  curso_id: string;
+  curso_nombre: string;
+  carrera: string;
+  nivel: "Alta" | "Media" | "Baja";
+  pe_list: string[];
+};
+
+export type TrazabilidadData = {
+  mappings: RAMapping[];
+  pe_summary: Record<string, Record<string, PESummaryItem>>;
+  total_mappings: number;
+  carreras_disponibles: string[];
+  carrera_filtrada: string | null;
+};
+
+export async function getTrazabilidad(carrera?: string) {
+  const q = carrera ? `?carrera=${carrera}` : "";
+  return apiFetch<TrazabilidadData>(`/api/trazabilidad${q}`);
+}

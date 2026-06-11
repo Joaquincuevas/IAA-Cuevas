@@ -104,8 +104,14 @@ def parse_matriz_tributacion(
 
         for comp_id, comp_texto in competencias.items():
             cell = row[cols[3 + comp_id - 1]]
-            tributa = isinstance(cell, str) and cell.strip().upper() == "X"
-            if tributa:
+            if isinstance(cell, str):
+                val = cell.strip().lower()
+                # Legacy Excel files use "X"/"x" to mark any tribute; treat as level "c".
+                # Future files may use "a"/"b"/"c" explicitly.
+                nivel = "c" if val == "x" else val
+            else:
+                nivel = None
+            if nivel in ("a", "b", "c"):
                 tributacion_rows.append(
                     {
                         "codigo_curso": codigo,
@@ -114,14 +120,14 @@ def parse_matriz_tributacion(
                         "carrera": carrera_code,
                         "competencia_id": comp_id,
                         "competencia_texto": comp_texto,
-                        "tributa": True,
+                        "nivel": nivel,
                     }
                 )
 
     _empty_cursos = pd.DataFrame(columns=["codigo", "nombre", "semestre", "carrera"])
     _empty_trib = pd.DataFrame(
         columns=["codigo_curso", "nombre_curso", "semestre", "carrera",
-                 "competencia_id", "competencia_texto", "tributa"]
+                 "competencia_id", "competencia_texto", "nivel"]
     )
     df_cursos = pd.DataFrame(cursos_rows) if cursos_rows else _empty_cursos
     df_tributacion = pd.DataFrame(tributacion_rows) if tributacion_rows else _empty_trib
@@ -217,7 +223,9 @@ def calcular_cobertura_por_semestre(
         texto_corto = comp["texto_corto"] if has_texto_corto else generar_texto_corto(texto)
 
         comp_trib = df[df["competencia_id"] == comp_id]
-        sem_counts = comp_trib.groupby("semestre")["codigo_curso"].nunique()
+        # Only nivel-c courses count for coverage (full-mastery tribute)
+        comp_trib_c = comp_trib[comp_trib["nivel"] == "c"] if "nivel" in comp_trib.columns else comp_trib
+        sem_counts = comp_trib_c.groupby("semestre")["codigo_curso"].nunique()
 
         row: dict = {
             "competencia_id": comp_id,

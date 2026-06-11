@@ -11,6 +11,7 @@ const NAV = [
   { href: "/dashboard/conexiones", label: "Conexiones", icon: Network },
     { href: "/dashboard/cobertura", label: "Cobertura", icon: BookOpen },
     { href: "/dashboard/objetivos", label: "Objetivos", icon: BookOpen },
+    { href: "/dashboard/trazabilidad", label: "Trazabilidad", icon: GitBranch },
   { href: "/dashboard/redundancia", label: "Redundancia", icon: GitBranch },
   { href: "/dashboard/taula", label: "Taula", icon: Sparkles, badge: true },
 ];

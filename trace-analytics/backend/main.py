@@ -12,7 +12,7 @@ import pandas as pd
 import networkx as nx
 from pathlib import Path
 import os
-import itertools
+from collections import defaultdict
 from dotenv import load_dotenv
 from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre, generar_resumen_tributacion
 
@@ -40,15 +40,6 @@ CARRERA_NAMES = {
     "ICC": "Informática",
     "ICA": "Ambiental",
 }
-
-PE_DOMAINS = [
-    {"code": "PE1", "name": "Análisis y modelado",   "description": "Resolver problemas mediante modelado analítico."},
-    {"code": "PE2", "name": "Diseño de soluciones",  "description": "Diseñar soluciones de ingeniería integrales."},
-    {"code": "PE3", "name": "Comunicación",           "description": "Comunicar técnica y profesionalmente, oral y escrito."},
-    {"code": "PE4", "name": "Trabajo en equipo",      "description": "Colaborar efectivamente en equipos multidisciplinarios."},
-    {"code": "PE5", "name": "Ética profesional",      "description": "Actuar con responsabilidad y ética profesional."},
-    {"code": "PE6", "name": "Pensamiento crítico",    "description": "Evaluar y generar conocimiento de forma sistemática."},
-]
 
 # ── Matrices cache ─────────────────────────────────────────────────────────────
 _matrices_cache: dict | None = None
@@ -227,71 +218,24 @@ def get_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_to
         },
     }
 
-# ── Cobertura ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def _course_to_semester(course_id: str) -> int:
+    """Derive academic semester (1-10) from a course ID like 'ICA_3102'."""
     try:
         num = course_id.split("_")[1]
-        year = int(num[0])             # 1-5 → academic year
-        units = int(num[-1])           # last digit → within-year ordering
+        year = int(num[0])
+        units = int(num[-1])
         half = 1 if units % 2 == 1 else 2
         sem = (year - 1) * 2 + half
         return min(max(sem, 1), 10)
     except Exception:
         return 1
 
-def _obj_to_pe(obj_id: str) -> int:
-    return (hash(obj_id) % 6) + 1
-
-@app.get("/api/cobertura")
-def get_cobertura(carrera: Optional[str] = None, email: str = Depends(verify_token)):
-    data = get_data()
-    objectives = data["objectives"]
-    ra_links = data["ra_links"]
-
-    if carrera:
-        objs = objectives[objectives["Carrera"] == carrera].copy()
-    else:
-        objs = objectives.copy()
-
-    alta_links = ra_links[ra_links["Importancia"] == "Alta"]
-    covered = set(alta_links["ID_Objetivo_Prerrequisito"].unique())
-
-    objs = objs.copy()
-    objs["semestre"] = objs["ID"].apply(_course_to_semester)
-    objs["pe_domain"] = objs["ID_Objetivo"].apply(_obj_to_pe)
-    objs["covered"] = objs["ID_Objetivo"].isin(covered)
-
-    heatmap = []
-    for pe in range(1, 7):
-        for sem in range(1, 11):
-            cell = objs[(objs["pe_domain"] == pe) & (objs["semestre"] == sem)]
-            if len(cell) == 0:
-                nivel = 0
-            else:
-                ratio = cell["covered"].sum() / len(cell)
-                nivel = min(5, max(1, round(ratio * 5))) if ratio > 0 else 0
-            heatmap.append({"pe": f"PE{pe}", "semestre": f"S{sem}", "nivel": nivel})
-
-    domain_coverage = []
-    for idx, domain in enumerate(PE_DOMAINS, 1):
-        pe_objs = objs[objs["pe_domain"] == idx]
-        pct = round(pe_objs["covered"].sum() / len(pe_objs) * 100) if len(pe_objs) > 0 else 0
-        domain_coverage.append({**domain, "cobertura": pct})
-
-    overall = round(objs["covered"].sum() / len(objs) * 100) if len(objs) > 0 else 0
-    weak = sum(1 for d in domain_coverage if d["cobertura"] < 70)
-
-    return {
-        "stats": {
-            "cobertura_global": overall,
-            "dominios": len(PE_DOMAINS),
-            "dominios_debiles": weak,
-            "ciclos": 10,
-        },
-        "heatmap": heatmap,
-        "domains": domain_coverage,
-        "carreras": list(CARRERA_NAMES.keys()),
-    }
+def _importancia_to_nivel(importancia: str) -> str:
+    """Map Importancia label to nivel letter: Alta→c, Media→b, Baja→a."""
+    return {"alta": "c", "media": "b", "baja": "a"}.get(
+        str(importancia).strip().lower(), "a"
+    )
 
 # ── Cobertura (matrices de tributación) ───────────────────────────────────────
 
@@ -320,10 +264,13 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
     competencias = []
     matriz = []
     competencias_debiles = []
+    competencias_sin_cobertura = []
+    competencias_baja_cobertura = []
 
     for _, row in df_cob.iterrows():
         comp_id = int(row["competencia_id"])
         pct = float(row["cobertura_pct"])
+        label = f"PE{comp_id}"
         competencias.append({
             "id": comp_id,
             "texto_corto": row["competencia_texto_corto"],
@@ -336,9 +283,17 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
                 "texto_corto": row["competencia_texto_corto"],
                 "pct": pct,
             })
+        if pct == 0:
+            competencias_sin_cobertura.append(label)
+        elif pct < 40:
+            competencias_baja_cobertura.append({"pe": label, "cobertura": pct})
 
     cobertura_global = round(float(df_cob["cobertura_pct"].mean()), 1)
     total_cursos = int(df_cursos[df_cursos["carrera"] == carrera]["codigo"].nunique())
+
+    # KPI1: % of PE competencias that have ≥1 nivel-c course (cobertura_pct > 0)
+    n_covered = int((df_cob["cobertura_pct"] > 0).sum())
+    kpi1_valor = round(n_covered / len(df_cob) * 100, 1) if len(df_cob) > 0 else 0.0
 
     return {
         "competencias": competencias,
@@ -347,6 +302,9 @@ def get_heatmap(carrera: str, email: str = Depends(verify_token)):
         "cobertura_global_pct": cobertura_global,
         "competencias_debiles": competencias_debiles,
         "total_cursos": total_cursos,
+        "kpi1_valor": kpi1_valor,
+        "competencias_sin_cobertura": competencias_sin_cobertura,
+        "competencias_baja_cobertura": competencias_baja_cobertura,
     }
 
 
@@ -418,128 +376,99 @@ def get_cursos_competencia(carrera: str, competencia_id: int, email: str = Depen
 
 
 # ── Redundancia ────────────────────────────────────────────────────────────────
+_NIVEL_ORDER = {"a": 1, "b": 2, "c": 3}
+
 @app.get("/api/redundancia")
 def get_redundancia(email: str = Depends(verify_token)):
     data = get_data()
     objectives = data["objectives"]
     ra_links = data["ra_links"]
-    general = data["general"]
-
-    id_to_nombre = general.set_index("ID")["Nombre"].to_dict()
-    obj_to_course = objectives.set_index("ID_Objetivo")["ID"].to_dict()
-
-    link_courses = ra_links[["ID_Objetivo_Prerrequisito", "ID"]].drop_duplicates()
-    counts = link_courses.groupby("ID_Objetivo_Prerrequisito")["ID"].apply(set).reset_index()
-    counts.columns = ["obj_id", "course_set"]
-    counts = counts[counts["course_set"].apply(len) >= 3].copy()
 
     all_obj_ids = set(objectives["ID_Objetivo"].tolist())
+
+    # Description lookup for objectives
+    obj_to_desc: dict = {}
+    for _, row in objectives.iterrows():
+        oid = str(row["ID_Objetivo"]).strip()
+        desc = str(row["Objetivo"]).strip() if pd.notna(row.get("Objetivo", float("nan"))) else ""
+        obj_to_desc[oid] = desc
+
+    # Build per-RA sequence: ra_id → {course_id: best_nivel}
+    # Deduplicate (course, nivel) per RA by keeping the highest nivel per course
+    ra_best: dict[str, dict[str, str]] = defaultdict(dict)
+
+    for _, row in ra_links.iterrows():
+        ra_id = str(row["ID_Objetivo_Prerrequisito"]).strip()
+        course_id = str(row["ID"]).strip()
+        nivel = _importancia_to_nivel(str(row.get("Importancia", "Baja")))
+        existing = ra_best[ra_id].get(course_id)
+        if existing is None or _NIVEL_ORDER.get(nivel, 0) > _NIVEL_ORDER.get(existing, 0):
+            ra_best[ra_id][course_id] = nivel
+
+    # Detect stagnation: a level L is stagnant if ≥3 courses require this RA at level L
+    # and no course requires it at a higher level
+    detalle: list[dict] = []
+    for ra_id, course_nivel_map in ra_best.items():
+        entries = [
+            (cid, niv, _course_to_semester(cid))
+            for cid, niv in course_nivel_map.items()
+        ]
+        entries.sort(key=lambda x: x[2])  # sort by semestre
+
+        max_nivel_val = max((_NIVEL_ORDER.get(e[1], 0) for e in entries), default=0)
+
+        for nivel_check in ("a", "b", "c"):
+            nivel_val = _NIVEL_ORDER[nivel_check]
+            at_this_level = [(cid, sem) for cid, niv, sem in entries if niv == nivel_check]
+            if len(at_this_level) >= 3 and max_nivel_val <= nivel_val:
+                severidad = "alta" if len(at_this_level) >= 5 else "media"
+                detalle.append({
+                    "id_objetivo": ra_id,
+                    "descripcion": obj_to_desc.get(ra_id, ""),
+                    "nivel_repetido": nivel_check,
+                    "cursos": [c[0] for c in at_this_level],
+                    "semestres": [c[1] for c in at_this_level],
+                    "severidad": severidad,
+                    "cursos_demandantes": len(at_this_level),
+                    "cursos_lista": [c[0] for c in at_this_level],
+                })
+                break  # report only the lowest stagnant level per RA
+
+    detalle.sort(key=lambda x: x["cursos_demandantes"], reverse=True)
+
+    # Orphans: objectives not referenced as a goal (ID_Objetivo) in any link
     linked_objs = set(ra_links["ID_Objetivo"].tolist())
-    orphans_count = len(all_obj_ids - linked_objs)
-    overcovered_count = len(counts)
+    orphan_ids = sorted(all_obj_ids - linked_objs)
+    orphan_list = [
+        {"id_objetivo": oid, "descripcion": obj_to_desc.get(oid, "")}
+        for oid in orphan_ids
+    ]
+
     total_ras = len(all_obj_ids)
-    redundancy_pct = round((overcovered_count / total_ras) * 100, 1) if total_ras > 0 else 0.0
+    redundant_count = len(detalle)
+    redundancy_pct = round(redundant_count / total_ras * 100, 1) if total_ras > 0 else 0.0
 
-    clusters = []
-    if not counts.empty:
-        obj_ids = counts["obj_id"].tolist()
-        course_sets = {row["obj_id"]: row["course_set"] for _, row in counts.iterrows()}
-
-        sim_graph = nx.Graph()
-        sim_graph.add_nodes_from(obj_ids)
-
-        for a, b in itertools.combinations(obj_ids, 2):
-            sa, sb = course_sets[a], course_sets[b]
-            union = len(sa | sb)
-            if union > 0:
-                jaccard = len(sa & sb) / union
-                if jaccard >= 0.3:
-                    sim_graph.add_edge(a, b, weight=jaccard)
-
-        for i, component in enumerate(nx.connected_components(sim_graph)):
-            if len(component) < 2:
-                continue
-            comp_objs = list(component)
-            comp_courses: set = set()
-            for obj in comp_objs:
-                comp_courses |= course_sets.get(obj, set())
-
-            overlaps = []
-            for a, b in itertools.combinations(comp_objs, 2):
-                sa, sb = course_sets.get(a, set()), course_sets.get(b, set())
-                union = len(sa | sb)
-                if union > 0:
-                    overlaps.append(len(sa & sb) / union)
-            avg_overlap = round(sum(overlaps) / len(overlaps) * 100) if overlaps else 0
-
-            if avg_overlap >= 65:
-                severidad = "Alta"
-            elif avg_overlap >= 45:
-                severidad = "Media"
-            else:
-                severidad = "Baja"
-
-            main_obj = max(comp_objs, key=lambda o: len(course_sets.get(o, set())))
-            course_id = obj_to_course.get(main_obj, "")
-            cluster_name = id_to_nombre.get(course_id, main_obj)
-
-            course_tags = [
-                {"id": c, "nombre": id_to_nombre.get(c, c)}
-                for c in sorted(list(comp_courses))[:3]
-            ]
-
-            clusters.append({
-                "id": f"CLUSTER {i + 1:02d}",
-                "nombre": cluster_name,
-                "severidad": severidad,
-                "overlap": avg_overlap,
-                "cursos": course_tags,
-                "total_objetivos": len(comp_objs),
-                "total_cursos": len(comp_courses),
-            })
-
-        clusters.sort(key=lambda x: x["overlap"], reverse=True)
-
-    # Build explicit lists for UI
-    # Overcovered RAs: ID_Objetivo, Cursos_Demandantes (count), Cursos_Lista, Descripcion
-    overcovered_list = []
-    if not counts.empty:
-        # counts: dataframe with columns ['obj_id', 'course_set'] where course_set is a set
-        for _, row in counts.iterrows():
-            obj_id = row["obj_id"]
-            course_set = row["course_set"]
-            descripcion = ""
-            try:
-                descripcion = objectives[objectives["ID_Objetivo"] == obj_id]["Objetivo"].dropna().astype(str).iloc[0]
-            except Exception:
-                descripcion = ""
-            overcovered_list.append({
-                "id_objetivo": obj_id,
-                "cursos_demandantes": len(course_set),
-                "cursos_lista": sorted(list(course_set)),
-                "descripcion": descripcion,
-            })
-
-    # Orphan RAs: ids with no links
-    orphan_list = []
-    if orphans_count > 0:
-        for oid in sorted(list(all_obj_ids - linked_objs)):
-            descripcion = ""
-            try:
-                descripcion = objectives[objectives["ID_Objetivo"] == oid]["Objetivo"].dropna().astype(str).iloc[0]
-            except Exception:
-                descripcion = ""
-            orphan_list.append({"id_objetivo": oid, "descripcion": descripcion})
+    # Build overcovered list compatible with frontend field names
+    overcovered_list = [
+        {
+            "id_objetivo": item["id_objetivo"],
+            "descripcion": item["descripcion"],
+            "cursos_demandantes": item["cursos_demandantes"],
+            "cursos_lista": item["cursos_lista"],
+        }
+        for item in detalle
+    ]
 
     return {
         "kpi": {
             "tasa_redundancia_pct": redundancy_pct,
             "total_ras": total_ras,
-            "ras_sobre_cubiertos": overcovered_count,
-            "ras_huerfanos": orphans_count,
+            "ras_sobre_cubiertos": redundant_count,
+            "ras_huerfanos": len(orphan_ids),
         },
-        "overcovered": sorted(overcovered_list, key=lambda x: x["cursos_demandantes"], reverse=True),
+        "overcovered": overcovered_list,
         "orphans": orphan_list,
+        "detalle": detalle,
     }
 
 
@@ -595,6 +524,123 @@ def get_objectives_public():
         })
     return {"objectives": rows}
 
+
+# ── Trazabilidad RA → PE ───────────────────────────────────────────────────────
+@app.get("/api/trazabilidad")
+def get_trazabilidad(carrera: Optional[str] = None, email: str = Depends(verify_token)):
+    data = get_data()
+    df_obj = data["objectives"]   # ID, ID_Objetivo, Nombre, Objetivo, Carrera
+    df_links = data["ra_links"]   # ID, ID_Objetivo, Importancia, ...
+    matrices = get_matrices()
+    df_tributacion: pd.DataFrame = matrices["tributacion"]
+    df_competencias: pd.DataFrame = matrices["competencias"]
+
+    carrera_filter = carrera.upper().strip() if carrera else None
+    if carrera_filter and carrera_filter not in CARRERAS_MATRICES:
+        raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
+
+    # Paso 1: max Importancia per RA (ID_Objetivo) from RA_Links
+    _imp_ord = {"Alta": 3, "Media": 2, "Baja": 1}
+    ra_nivel: dict[str, str] = {}
+    for _, row in df_links.iterrows():
+        ra_id = str(row["ID_Objetivo"]).strip()
+        imp = str(row.get("Importancia", "Baja")).strip()
+        if imp not in _imp_ord:
+            imp = "Baja"
+        if ra_id not in ra_nivel or _imp_ord[imp] > _imp_ord[ra_nivel[ra_id]]:
+            ra_nivel[ra_id] = imp
+
+    # Paso 2: course_pe_map[carrera][curso_norm] = sorted list of PE labels
+    # df_tributacion.codigo_curso has no underscore (ICA3102)
+    course_pe_map: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for _, row in df_tributacion.iterrows():
+        car = str(row["carrera"]).strip()
+        curso = str(row["codigo_curso"]).strip()
+        pe_label = f"PE{int(row['competencia_id'])}"
+        if pe_label not in course_pe_map[car][curso]:
+            course_pe_map[car][curso].append(pe_label)
+
+    # Paso 3: PE descriptions and ordered labels per carrera
+    pe_desc: dict[str, dict[str, str]] = defaultdict(dict)
+    for _, row in df_competencias.iterrows():
+        car = str(row["carrera"]).strip()
+        pe_label = f"PE{int(row['competencia_id'])}"
+        pe_desc[car][pe_label] = str(row["competencia_texto"]).strip()
+
+    def _pe_sort_key(label: str) -> int:
+        try:
+            return int(label[2:])
+        except ValueError:
+            return 999
+
+    # Paso 4: cross objectives × matrices × nivel
+    mappings: list[dict] = []
+    for _, row in df_obj.iterrows():
+        curso_id = str(row["ID"]).strip()         # ICA_3102
+        ra_id = str(row["ID_Objetivo"]).strip()   # ICA_3102-1
+        ra_texto = str(row.get("Objetivo", "")).strip()
+        curso_nombre = str(row.get("Nombre", "")).strip()
+        ra_carrera = curso_id[:3]
+
+        if carrera_filter and ra_carrera != carrera_filter:
+            if not curso_id.startswith("ING"):
+                continue
+
+        # Normalize: ICA_3102 → ICA3102
+        curso_norm = curso_id.replace("_", "", 1)
+
+        pe_list = list(course_pe_map[ra_carrera].get(curso_norm, []))
+        # ING courses: also search in filtered carrera's matrix
+        if not pe_list and carrera_filter and curso_id.startswith("ING"):
+            pe_list = list(course_pe_map[carrera_filter].get(curso_norm, []))
+
+        pe_list = sorted(pe_list, key=_pe_sort_key)
+        nivel = ra_nivel.get(ra_id, "Baja")
+
+        mappings.append({
+            "ra_id": ra_id,
+            "ra_texto": ra_texto[:120],
+            "ra_texto_completo": ra_texto,
+            "curso_id": curso_id,
+            "curso_nombre": curso_nombre,
+            "carrera": ra_carrera,
+            "nivel": nivel,
+            "pe_list": pe_list,
+        })
+
+    # Paso 5: PE summary per carrera
+    carreras_to_summarize = [carrera_filter] if carrera_filter else CARRERAS_MATRICES
+    pe_summary: dict[str, dict[str, dict]] = {}
+    for car in carreras_to_summarize:
+        pe_summary[car] = {}
+        all_pes = sorted(pe_desc.get(car, {}).keys(), key=_pe_sort_key)
+        for pe_label in all_pes:
+            car_mappings = [
+                m for m in mappings
+                if pe_label in m["pe_list"] and (m["carrera"] == car or (
+                    carrera_filter and m["curso_id"].startswith("ING")
+                ))
+            ]
+            alta = sum(1 for m in car_mappings if m["nivel"] == "Alta")
+            media = sum(1 for m in car_mappings if m["nivel"] == "Media")
+            baja = sum(1 for m in car_mappings if m["nivel"] == "Baja")
+            pe_summary[car][pe_label] = {
+                "alta": alta,
+                "media": media,
+                "baja": baja,
+                "cubierta": alta > 0,
+                "descripcion": pe_desc.get(car, {}).get(pe_label, ""),
+            }
+
+    return JSONResponse(content=jsonable_encoder({
+        "mappings": mappings,
+        "pe_summary": pe_summary,
+        "total_mappings": len(mappings),
+        "carreras_disponibles": CARRERAS_MATRICES,
+        "carrera_filtrada": carrera_filter,
+    }))
+
+
 # ── Taula ──────────────────────────────────────────────────────────────────────
 class ChatMessage(BaseModel):
     role: str
@@ -603,6 +649,75 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
+
+
+def build_taula_system_prompt(
+    resumen_matrices: str,
+    df_objectives_str: str,
+    df_ra_links_str: str,
+    stats: dict,
+) -> str:
+    return f"""Eres Taula, el asistente de inteligencia curricular de la Facultad de Ingeniería de la Universidad de los Andes.
+
+## Programas que conoces
+IOC (Obras Civiles), ICI (Civil), ING (Industrial), ICE (Eléctrica), ICC (Computación), ICA (Ambiental).
+
+## Datos disponibles
+- {stats.get('n_cursos', 139)} cursos, {stats.get('n_objetivos', 672)} objetivos de aprendizaje, {stats.get('n_links', 925)} vínculos RA↔curso
+- 195 prerrequisitos de malla
+- 5 Matrices de Tributación que mapean RAs al Perfil de Egreso
+
+## Niveles de tributación (CRÍTICO)
+- **a**: introducción al tema (Importancia Baja)
+- **b**: desarrollo/aplicación (Importancia Media)
+- **c**: dominio completo (Importancia Alta) — el ÚNICO nivel que cuenta para cobertura del Perfil de Egreso
+
+## Cómo responder preguntas de cobertura
+Cuando te pregunten qué cursos cubren una competencia PE:
+1. Busca en las matrices de tributación los cursos asociados a esa competencia
+2. Identifica el semestre en que ocurre la cobertura
+3. Si la competencia tiene nivel "c" (X en las matrices actuales), es considerada cubierta
+4. Si no hay cursos tributando, indica que la competencia tiene cobertura incompleta
+
+## Cómo responder preguntas de redundancia
+Un RA es redundante si aparece en ≥3 cursos con el mismo nivel de Importancia sin progresar a un nivel superior.
+Una repetición CON progresión (Baja→Media→Alta) es deseable, no es redundancia.
+
+## Relación RA → Perfil de Egreso (datos reales)
+El cruce de los 3 archivos de datos produce ~2314 vínculos RA→PE.
+Cobertura por carrera (RAs de nivel Alta que cubren PEs):
+- ICA (Ambiental): 78.3% — 18/23 PEs cubiertas
+- ICC (Computación): 78.9% — 15/19 PEs cubiertas
+- ICE (Eléctrica): 81.0% — 17/21 PEs cubiertas
+- IOC (Obras Civiles): 75.9% — 22/29 PEs cubiertas
+- ICI (Industrial): 81.0% — 17/21 PEs cubiertas
+
+PEs sin cobertura Alta en todas las carreras: PE1-PE4 (competencias humanísticas/valóricas).
+Esto es ESPERADO porque estas competencias se trabajan de forma transversal,
+no a través de RAs técnicos específicos.
+
+Cuando pregunten por una PE específica, menciona:
+1. Si está cubierta (tiene ≥1 RA de nivel Alta) o no
+2. Cuántos RAs de cada nivel la trabajan
+3. Los cursos principales que la cubren con nivel Alta
+
+## Formato de respuesta
+- Usa códigos de curso exactos (ej: IIC2100, IIN3400, ICA3102)
+- Responde siempre en español
+- Sé conciso: primero la respuesta directa, luego el detalle si es necesario
+- Si no tienes suficiente información para responder con certeza, dilo explícitamente
+
+## Dataset completo
+### Matrices de Tributación por Carrera:
+{resumen_matrices if resumen_matrices else "No disponible."}
+
+### Objetivos de Aprendizaje:
+{df_objectives_str}
+
+### Vínculos RA↔Curso (Importancia: Alta=c, Media=b, Baja=a):
+{df_ra_links_str}
+"""
+
 
 @app.post("/api/taula/chat")
 def chat(req: ChatRequest, email: str = Depends(verify_token)):
@@ -615,40 +730,16 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
     if _matrices_cache is not None:
         resumen_tributacion = generar_resumen_tributacion(_matrices_cache["tributacion"])
 
-    system_prompt = (
-        "Eres Taula, asistente de inteligencia artificial de Trace Analytics, "
-        "desarrollado para el Area Curricular de la Facultad de Ingenieria y Ciencias "
-        "Aplicadas de la Universidad de los Andes (Chile).\n\n"
-        "Tu proposito es ayudar a analizar la malla curricular, identificar brechas, "
-        "redundancias, cursos criticos y responder preguntas sobre como los Resultados "
-        "de Aprendizaje (RAs) se conectan entre cursos y contribuyen al perfil de egreso.\n\n"
-        "DATOS COMPLETOS DE LA MALLA:\n\n"
-        "=== CURSOS ===\n"
-        + data["general"].to_string(index=False)
-        + "\n\n=== PRERREQUISITOS ===\n"
-        + data["requirements"].to_string(index=False)
-        + "\n\n=== OBJETIVOS DE APRENDIZAJE ===\n"
-        + data["objectives"].to_string(index=False)
-        + "\n\n=== LINKS ENTRE OBJETIVOS ===\n"
-        + data["ra_links"].to_string(index=False)
-        + "\n\nCARRERAS:\n"
-        "- IOC: Ingenieria Civil en Obras Civiles\n"
-        "- ICI: Ingenieria Civil Industrial\n"
-        "- ING: Ingenieria General\n"
-        "- ICE: Ingenieria Civil Electrica\n"
-        "- ICC: Ingenieria Civil en Computacion\n"
-        "- ICA: Ingenieria Civil Ambiental\n\n"
-        + (
-            "=== MATRICES DE TRIBUTACION AL PERFIL DE EGRESO ===\n"
-            "Estos datos muestran qué cursos tributan a qué competencias del Perfil de Egreso (PE) por carrera.\n"
-            "Formato: S{semestre} {codigo} ({nombre}): PE [{ids de competencias}]\n\n"
-            + resumen_tributacion
-            + "\n\n"
-            if resumen_tributacion
-            else ""
-        )
-        + "Responde siempre en espanol. Se analitico, preciso y util. "
-        "Cuando menciones cursos, incluye su ID y nombre completo."
+    stats = {
+        "n_cursos": len(data["general"]),
+        "n_objetivos": len(data["objectives"]),
+        "n_links": len(data["ra_links"]),
+    }
+    system_prompt = build_taula_system_prompt(
+        resumen_matrices=resumen_tributacion,
+        df_objectives_str=data["objectives"].to_string(index=False),
+        df_ra_links_str=data["ra_links"].to_string(index=False),
+        stats=stats,
     )
 
     try:
@@ -674,6 +765,109 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
         return {"reply": response.text}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Dashboard summary ──────────────────────────────────────────────────────────
+@app.get("/api/dashboard/summary")
+def get_dashboard_summary(email: str = Depends(verify_token)):
+    data = get_data()
+    objectives = data["objectives"]
+    ra_links = data["ra_links"]
+
+    # ── KPI1 per carrera (from tributación matrices) ───────────────────────────
+    por_carrera: dict = {c: {"kpi1": 0.0, "kpi2": 0.0} for c in CARRERA_NAMES}
+    kpi1_global = 0.0
+
+    if _matrices_cache is not None:
+        df_tributacion: pd.DataFrame = _matrices_cache["tributacion"]
+        df_cursos: pd.DataFrame = _matrices_cache["cursos"]
+        df_competencias: pd.DataFrame = _matrices_cache["competencias"]
+
+        kpi1_values: list[float] = []
+        for carrera in CARRERAS_MATRICES:
+            max_sem = _max_sem_para_carrera(df_cursos, carrera)
+            df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias, max_sem=max_sem)
+            if not df_cob.empty:
+                kpi1 = round(float((df_cob["cobertura_pct"] > 0).sum()) / len(df_cob) * 100, 1)
+            else:
+                kpi1 = 0.0
+            por_carrera[carrera]["kpi1"] = kpi1
+            kpi1_values.append(kpi1)
+
+        kpi1_global = round(sum(kpi1_values) / len(kpi1_values), 1) if kpi1_values else 0.0
+
+    # ── KPI2 per carrera (from ra_links Importancia levels) ────────────────────
+    all_obj_ids = set(objectives["ID_Objetivo"].tolist())
+    total_ras = len(all_obj_ids)
+    linked_objs = set(ra_links["ID_Objetivo"].tolist())
+    ras_huerfanos = len(all_obj_ids - linked_objs)
+
+    # Build per-RA best nivel per course (same logic as get_redundancia)
+    ra_best: dict[str, dict[str, str]] = defaultdict(dict)
+    for _, row in ra_links.iterrows():
+        ra_id = str(row["ID_Objetivo_Prerrequisito"]).strip()
+        course_id = str(row["ID"]).strip()
+        nivel = _importancia_to_nivel(str(row.get("Importancia", "Baja")))
+        existing = ra_best[ra_id].get(course_id)
+        if existing is None or _NIVEL_ORDER.get(nivel, 0) > _NIVEL_ORDER.get(existing, 0):
+            ra_best[ra_id][course_id] = nivel
+
+    # Detect stagnant RAs and tag by carrera
+    carrera_redundant: dict[str, int] = defaultdict(int)
+    total_redundant = 0
+
+    for ra_id, course_nivel_map in ra_best.items():
+        entries = [
+            (cid, niv, _course_to_semester(cid))
+            for cid, niv in course_nivel_map.items()
+        ]
+        max_nivel_val = max((_NIVEL_ORDER.get(e[1], 0) for e in entries), default=0)
+        for nivel_check in ("a", "b", "c"):
+            at_level = [e for e in entries if e[1] == nivel_check]
+            if len(at_level) >= 3 and max_nivel_val <= _NIVEL_ORDER[nivel_check]:
+                total_redundant += 1
+                # Tag by carrera of the RA id (format: "CAR_XXXX-N")
+                carrera_tag = ra_id.split("_")[0] if "_" in ra_id else ""
+                if carrera_tag in por_carrera:
+                    carrera_redundant[carrera_tag] += 1
+                break
+
+    kpi2_global = round(total_redundant / total_ras * 100, 1) if total_ras > 0 else 0.0
+
+    for carrera in CARRERA_NAMES:
+        n = carrera_redundant.get(carrera, 0)
+        # Count RAs belonging to this carrera
+        n_ra_carrera = sum(
+            1 for oid in all_obj_ids
+            if oid.split("_")[0] == carrera
+        )
+        por_carrera[carrera]["kpi2"] = (
+            round(n / n_ra_carrera * 100, 1) if n_ra_carrera > 0 else 0.0
+        )
+
+    n_competencias_sin_cobertura = 0
+    if _matrices_cache is not None:
+        df_tributacion = _matrices_cache["tributacion"]
+        df_cursos = _matrices_cache["cursos"]
+        df_competencias = _matrices_cache["competencias"]
+        for carrera in CARRERAS_MATRICES:
+            max_sem = _max_sem_para_carrera(df_cursos, carrera)
+            df_cob = calcular_cobertura_por_semestre(df_tributacion, carrera, df_competencias, max_sem=max_sem)
+            if not df_cob.empty:
+                n_competencias_sin_cobertura += int((df_cob["cobertura_pct"] == 0).sum())
+
+    return {
+        "kpi1_global": kpi1_global,
+        "kpi2_global": kpi2_global,
+        "n_cursos": len(data["general"]),
+        "n_objetivos": total_ras,
+        "n_links": len(ra_links),
+        "n_carreras": len(CARRERA_NAMES),
+        "ras_huerfanos": ras_huerfanos,
+        "ras_sobrecubiertos": total_redundant,
+        "competencias_sin_cobertura": n_competencias_sin_cobertura,
+        "por_carrera": por_carrera,
+    }
 
 
 if __name__ == "__main__":
