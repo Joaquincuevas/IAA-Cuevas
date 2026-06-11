@@ -743,13 +743,15 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
 
         client = Groq(api_key=api_key)
 
+        # Keep last 4 messages of history to stay within TPM limits
+        trimmed_history = req.history[-4:] if len(req.history) > 4 else req.history
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        for msg in req.history:
+        for msg in trimmed_history:
             messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": req.message})
 
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=messages,
             temperature=0.3,
             max_tokens=1024,
