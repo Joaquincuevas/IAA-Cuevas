@@ -79,7 +79,7 @@ export default function TaulaPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-[18px] font-bold text-[#111827]">✦ Taula</h1>
             <span className="text-[10px] font-medium px-2 py-0.5 bg-[#F3F4F6] border border-[#E5E7EB] rounded text-[#6B7280]">
-              IA · Gemini
+              IA · Llama
             </span>
           </div>
           <p className="text-[12px] text-[#6B7280] mt-0.5">
@@ -103,7 +103,7 @@ export default function TaulaPage() {
           </div>
           <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-4 py-3">
             <p className="text-[13px] text-[#111827] leading-relaxed">
-              Hola Joaquín. Soy Taula, tu asistente curricular. Puedo ayudarte a explorar conexiones
+              Hola {user?.name ?? "estudiante"}. Soy Taula, tu asistente curricular. Puedo ayudarte a explorar conexiones
               entre cursos, evaluar cobertura del perfil de egreso, detectar redundancias y responder
               preguntas sobre los 672 objetivos de aprendizaje de Ingeniería UAndes. ¿Por dónde partimos?
             </p>

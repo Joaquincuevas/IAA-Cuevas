@@ -28,8 +28,8 @@ DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / 
 DATA_FOLDER = DATA_PATH.parent
 
 USERS = {
-    "jjcuevas@miuandes.cl": {"password": "admin123", "name": "J. Cuevas", "role": "admin"},
-    "vcuevas@miuandes.cl":  {"password": "admin123", "name": "V. Cuevas", "role": "admin"},
+    "jjcuevas@miuandes.cl": {"password": "admin123", "name": "Joaquín", "role": "admin"},
+    "vcuevas@miuandes.cl":  {"password": "admin123", "name": "Vicente", "role": "admin"},
 }
 
 CARRERA_NAMES = {
