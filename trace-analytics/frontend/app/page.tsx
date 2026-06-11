@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AnimatedGraph from "@/components/AnimatedGraph";
 
 export default function LandingPage() {
   return (
@@ -53,33 +54,9 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Decorative graph */}
-          <div className="flex-shrink-0 w-80 h-64 relative opacity-60">
-            <svg width="320" height="260" viewBox="0 0 320 260" className="w-full h-full">
-              {/* Edges */}
-              <line x1="160" y1="130" x2="60" y2="60" stroke="#E5E7EB" strokeWidth="1.5" />
-              <line x1="160" y1="130" x2="260" y2="60" stroke="#E5E7EB" strokeWidth="1.5" />
-              <line x1="160" y1="130" x2="60" y2="200" stroke="#E5E7EB" strokeWidth="1.5" />
-              <line x1="160" y1="130" x2="260" y2="200" stroke="#E5E7EB" strokeWidth="1.5" />
-              <line x1="60" y1="60" x2="20" y2="130" stroke="#E5E7EB" strokeWidth="1" />
-              <line x1="260" y1="60" x2="300" y2="130" stroke="#E5E7EB" strokeWidth="1" />
-              <line x1="60" y1="200" x2="20" y2="130" stroke="#E5E7EB" strokeWidth="1" />
-              <line x1="260" y1="200" x2="300" y2="130" stroke="#E5E7EB" strokeWidth="1" />
-              <line x1="60" y1="60" x2="160" y2="20" stroke="#E5E7EB" strokeWidth="1" />
-              <line x1="260" y1="60" x2="160" y2="20" stroke="#E5E7EB" strokeWidth="1" />
-              {/* Nodes */}
-              <circle cx="160" cy="130" r="8" fill="#1B2A4A" />
-              <circle cx="60" cy="60" r="6" fill="#243B6E" />
-              <circle cx="260" cy="60" r="6" fill="#243B6E" />
-              <circle cx="60" cy="200" r="6" fill="#243B6E" />
-              <circle cx="260" cy="200" r="6" fill="#243B6E" />
-              <circle cx="20" cy="130" r="4" fill="#3B6DC1" />
-              <circle cx="300" cy="130" r="4" fill="#3B6DC1" />
-              <circle cx="160" cy="20" r="4" fill="#3B6DC1" />
-              <circle cx="110" cy="170" r="3" fill="#6B8EB8" />
-              <circle cx="210" cy="90" r="3" fill="#6B8EB8" />
-              <circle cx="200" cy="170" r="3" fill="#6B8EB8" />
-            </svg>
+          {/* Animated graph */}
+          <div className="flex-shrink-0 w-80 h-64 relative">
+            <AnimatedGraph />
           </div>
         </div>
       </main>
