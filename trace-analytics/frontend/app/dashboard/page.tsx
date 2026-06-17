@@ -6,31 +6,24 @@ import { RefreshCw, Download, ArrowRight, Sparkles } from "lucide-react";
 import { getStats } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
-const ACTIVITY = [
-  { icon: "📄", actor: "C. Maturana", action: "Actualizó los RA del curso ICT2210 — Mecánica de Fluidos", time: "Hace 2 h" },
-  { icon: "🔗", actor: "M. Ríos", action: "Vinculó 12 objetivos al perfil PE3: Comunicación", time: "Ayer" },
-  { icon: "⚠️", actor: "P. Soto", action: "Detectó brecha en cobertura del semestre S6 — Eléctrica", time: "Lun" },
-  { icon: "✦", actor: "Taula ✦", action: "Generó reporte trimestral de redundancia — 5 clusters revisados", time: "Lun" },
-];
-
 const EXPLORE_CARDS = [
   {
-    tag: "VISTA 1",
-    title: "Conexiones Curriculares",
-    desc: "Cómo cada curso recibe y alimenta a otros en la malla. Encuentra pre-requisitos implícitos y cuellos de botella.",
-    href: "/dashboard/conexiones",
+    tag: "PRINCIPAL",
+    title: "Explorador",
+    desc: "Relación Perfil de Egreso ↔ Curso ↔ Objetivo de aprendizaje. Filtra por cualquier dimensión y exporta a Excel.",
+    href: "/dashboard/explorador",
   },
   {
-    tag: "KPI 1",
-    title: "Cobertura Curricular",
-    desc: "Distribución de los 6 dominios del perfil de egreso a lo largo de los 10 semestres, por carrera.",
-    href: "/dashboard/cobertura",
-  },
-  {
-    tag: "KPI 2",
-    title: "Objetivos Críticos",
-    desc: "Temas que se repiten innecesariamente y RAs huérfanos sin curso que los aborde.",
+    tag: "ANÁLISIS",
+    title: "Redundancia",
+    desc: "Objetivos de aprendizaje semánticamente similares entre cursos, para detectar repetición sin progresión.",
     href: "/dashboard/redundancia",
+  },
+  {
+    tag: "IA",
+    title: "Taula",
+    desc: "Pregunta sobre la malla en lenguaje natural — análisis, brechas y comparaciones.",
+    href: "/dashboard/taula",
   },
 ];
 
@@ -64,9 +57,9 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="CURSOS TOTALES" value={stats?.cursos ?? 139} sub="+4 vs. 2025-2" dotColor="#10B981" />
-        <StatCard label="OBJETIVOS DE APRENDIZAJE" value={stats?.objetivos ?? 672} sub="Mapeados al perfil de egreso" dotColor="#10B981" />
-        <StatCard label="LINKS RA" value={stats?.links ?? 924} sub="8 nuevos esta semana" dotColor="#10B981" />
+        <StatCard label="CURSOS TOTALES" value={stats?.cursos ?? 139} sub="6 carreras de Ingeniería" dotColor="#6B7280" />
+        <StatCard label="OBJETIVOS DE APRENDIZAJE" value={stats?.objetivos ?? 672} sub="Resultados de aprendizaje (RA)" dotColor="#6B7280" />
+        <StatCard label="LINKS ENTRE RA" value={stats?.links ?? 924} sub="Relaciones de prerrequisito" dotColor="#6B7280" />
         <StatCard label="CARRERAS" value={stats?.carreras ?? 6} sub="Facultad de Ingeniería" dotColor="#6B7280" />
       </div>
 
@@ -74,7 +67,7 @@ export default function DashboardPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">Explorar</p>
-          <p className="text-[11px] text-[#9CA3AF]">3 vistas disponibles</p>
+          <p className="text-[11px] text-[#9CA3AF]">3 módulos</p>
         </div>
         <div className="grid grid-cols-3 gap-4">
           {EXPLORE_CARDS.map((c) => (

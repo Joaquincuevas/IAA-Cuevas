@@ -3,15 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, Network, BookOpen, GitBranch, Sparkles, Plus } from "lucide-react";
+import { Home, Table2, GitBranch, Sparkles, Plus } from "lucide-react";
 import { isAuthenticated, getUser, clearAuth } from "@/lib/auth";
 
 const NAV = [
   { href: "/dashboard", label: "Inicio", icon: Home },
-  { href: "/dashboard/conexiones", label: "Conexiones", icon: Network },
-    { href: "/dashboard/cobertura", label: "Cobertura", icon: BookOpen },
-    { href: "/dashboard/objetivos", label: "Objetivos", icon: BookOpen },
-    { href: "/dashboard/trazabilidad", label: "Trazabilidad", icon: GitBranch },
+  { href: "/dashboard/explorador", label: "Explorador", icon: Table2 },
   { href: "/dashboard/redundancia", label: "Redundancia", icon: GitBranch },
   { href: "/dashboard/taula", label: "Taula", icon: Sparkles, badge: true },
 ];
