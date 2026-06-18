@@ -76,27 +76,34 @@ def build_conexiones_prompt(
     )
 
     return f"""Eres un experto en diseño curricular de ingeniería de la Universidad de los Andes (Chile).
-Tu tarea es determinar qué Resultados de Aprendizaje (RAs) de un curso contribuyen directamente a cada Perfil de Egreso (PE) de la carrera.
+Tu tarea es identificar conexiones granulares entre los Resultados de Aprendizaje (RAs) de UN curso
+y los Perfiles de Egreso (PE) a los que ese curso tributa según la matriz curricular.
 
 CURSO: {curso_id} — {curso_nombre} (carrera {carrera})
 
-RESULTADOS DE APRENDIZAJE del curso:
+RESULTADOS DE APRENDIZAJE del curso (evalúa cada uno):
 {ra_lines}
 
-PERFILES DE EGRESO a los que este curso tributa (solo evalúa estos):
+PERFILES DE EGRESO candidatos para este curso (solo evalúa estos PEs, no otros):
 {pe_lines}
 
-INSTRUCCIONES IMPORTANTES:
-1. Para cada RA, decide a cuáles PEs contribuye directamente según su contenido textual.
-2. Un RA puede mapear a 0, 1 o varios PEs. No todos deben tener conexión.
-3. La confianza (0.0–1.0) refleja qué tan claramente el RA apunta a ese PE.
-   - 0.8–1.0: conexión directa y explícita.
-   - 0.5–0.79: conexión razonable pero indirecta.
-   - 0.3–0.49: conexión débil o contextual.
-   - < 0.3: no mapear, mejor omitir.
-4. Si el curso tributa un PE pero ningún RA lo cubre bien, inclúyelo en "gaps".
-5. NO inventes IDs ni PEs. Usa exactamente los IDs provistos.
-6. Responde SOLO con JSON válido, sin texto adicional.
+ENFOQUE DEL ANÁLISIS:
+- Trabajas curso por curso: recibes TODOS los RAs del curso y un subconjunto de PEs relevantes.
+- Para cada RA, revisa cuáles PEs calzan según el contenido textual del objetivo.
+- NO es necesario que cada RA se conecte con todos los PEs, ni que todos los PEs queden cubiertos.
+- Lo deseable: que cada RA tenga al menos UN PE con confianza ≥ 0.5, si existe un vínculo razonable.
+- Si un RA no calza razonablemente con ningún PE, déjalo sin conexión (no fuerces enlaces débiles).
+
+REGLAS DE CONFIANZA (0.0–1.0):
+- 0.8–1.0: conexión directa y explícita.
+- 0.5–0.79: conexión razonable pero indirecta.
+- < 0.5: NO incluir en "conexiones" (omitir por completo).
+
+OTRAS REGLAS:
+1. Un RA puede mapear a 0, 1 o varios PEs (solo los que superen el umbral).
+2. Si el curso tributa un PE pero ningún RA lo cubre bien (≥ 0.5), inclúyelo en "gaps".
+3. NO inventes IDs ni PEs. Usa exactamente los IDs provistos.
+4. Responde SOLO con JSON válido, sin texto adicional.
 
 Responde con este formato JSON exacto:
 {{

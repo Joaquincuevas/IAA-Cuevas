@@ -209,11 +209,16 @@ export default function ConexionesPage() {
             <thead>
               <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">PE</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[22%]">Descripción PE</th>
+                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[28%]">Descripción PE</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Curso</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">RA</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[24%]">Objetivo</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Conf.</th>
+                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[28%]">Objetivo (RA)</th>
+                <th
+                  className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold whitespace-nowrap"
+                  title="Qué tan clara es la conexión RA→PE según la IA (solo se guardan ≥50%). ≥80% directa; 50–79% razonable."
+                >
+                  Confianza
+                </th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[16%]">Razón IA</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Estado</th>
                 <th className="px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Votar</th>
@@ -225,16 +230,24 @@ export default function ConexionesPage() {
                   key={p.id}
                   className={`border-b border-[#F3F4F6] ${i % 2 === 0 ? "" : "bg-[#FAFAFA]"} hover:bg-[#F0F4FF] transition-colors`}
                 >
-                  <td className="px-3 py-2 font-semibold text-[#1B2A4A]">{p.pe_id}</td>
-                  <td className="px-3 py-2 text-[#374151] leading-snug">{p.pe_texto.slice(0, 80)}{p.pe_texto.length > 80 ? "…" : ""}</td>
-                  <td className="px-3 py-2 text-[#374151]">
+                  <td className="px-3 py-2 font-semibold text-[#1B2A4A] align-top">{p.pe_id}</td>
+                  <td className="px-3 py-2 text-[#374151] leading-relaxed align-top whitespace-normal">{p.pe_texto}</td>
+                  <td className="px-3 py-2 text-[#374151] align-top">
                     <div className="font-medium">{p.curso_id}</div>
-                    <div className="text-[11px] text-[#9CA3AF]">{p.curso_nombre.slice(0, 28)}</div>
+                    <div className="text-[11px] text-[#9CA3AF] leading-snug mt-0.5">{p.curso_nombre}</div>
                   </td>
-                  <td className="px-3 py-2 text-[#6B7280] font-mono text-[11px]">{p.ra_id}</td>
-                  <td className="px-3 py-2 text-[#374151] leading-snug">{p.ra_texto.slice(0, 100)}{p.ra_texto.length > 100 ? "…" : ""}</td>
-                  <td className="px-3 py-2">
-                    <span style={{ color: CONF_COLOR(p.confianza) }} className="font-semibold">
+                  <td className="px-3 py-2 text-[#6B7280] font-mono text-[11px] align-top">{p.ra_id}</td>
+                  <td className="px-3 py-2 text-[#374151] leading-relaxed align-top whitespace-normal">{p.ra_texto}</td>
+                  <td className="px-3 py-2 align-top">
+                    <span
+                      style={{ color: CONF_COLOR(p.confianza) }}
+                      className="font-semibold"
+                      title={
+                        p.confianza >= 0.8
+                          ? "Conexión directa y explícita"
+                          : "Conexión razonable pero indirecta"
+                      }
+                    >
                       {(p.confianza * 100).toFixed(0)}%
                     </span>
                   </td>

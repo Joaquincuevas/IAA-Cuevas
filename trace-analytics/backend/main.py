@@ -720,6 +720,24 @@ def get_latest_jobs(email: str = Depends(verify_token)):
     }
 
 
+@app.get("/api/ai/jobs/current")
+def get_current_ai_job(email: str = Depends(verify_token)):
+    """Job activo (si hay uno en curso)."""
+    job = ai_db.get_current_job()
+    if not job:
+        raise HTTPException(status_code=404, detail="No hay análisis en curso")
+    return job
+
+
+@app.post("/api/ai/cancel")
+def cancel_ai_job(email: str = Depends(verify_token)):
+    """Cancela el análisis en curso."""
+    job = ai_db.cancel_current_job()
+    if not job:
+        raise HTTPException(status_code=404, detail="No hay análisis en curso para cancelar")
+    return {"message": "Análisis cancelado", "job": job}
+
+
 @app.get("/api/ai/jobs/{job_id}")
 def get_job_status(job_id: int, email: str = Depends(verify_token)):
     job = ai_db.get_job(job_id)

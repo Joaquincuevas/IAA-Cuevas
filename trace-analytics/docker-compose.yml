@@ -9,6 +9,7 @@ services:
       PORT: 8000
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MAX_WORKERS: ${GROQ_MAX_WORKERS:-2}
       DATA_PATH: /data/RA_UandesFunctional.xlsx
       APP_DB: /data/app.db
     volumes:

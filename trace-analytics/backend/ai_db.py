@@ -28,6 +28,10 @@ APPROVE_THRESHOLD = 2
 REJECT_THRESHOLD = 2
 
 
+class JobCancelled(Exception):
+    """El usuario solicitó cancelar el job en curso."""
+
+
 # ── Conexión ──────────────────────────────────────────────────────────────────
 def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -164,6 +168,8 @@ def update_job_progress(job_id: int, progress: dict) -> None:
 
 
 def finish_job(job_id: int, stats: dict) -> None:
+    if is_job_cancelled(job_id):
+        return
     conn = _conn()
     conn.execute(
         """UPDATE ai_jobs SET status='done', finished_at=?, stats_json=?,
@@ -180,10 +186,69 @@ def finish_job(job_id: int, stats: dict) -> None:
 
 
 def fail_job(job_id: int, error: str) -> None:
+    if is_job_cancelled(job_id):
+        return
     conn = _conn()
     conn.execute(
         "UPDATE ai_jobs SET status='error', finished_at=?, error_msg=? WHERE id=?",
         (datetime.utcnow().isoformat(), error[:2000], job_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def is_job_cancelled(job_id: int) -> bool:
+    conn = _conn()
+    row = conn.execute("SELECT status FROM ai_jobs WHERE id=?", (job_id,)).fetchone()
+    conn.close()
+    return row is not None and row["status"] == "cancelled"
+
+
+def cancel_job(job_id: int, reason: str = "Cancelado por el usuario") -> bool:
+    """Marca un job activo como cancelado. El hilo lo detecta en el siguiente paso."""
+    conn = _conn()
+    cur = conn.execute(
+        """UPDATE ai_jobs SET status='cancelled', finished_at=?, error_msg=?,
+           progress_json=? WHERE id=? AND status IN ('pending', 'running')""",
+        (
+            datetime.utcnow().isoformat(),
+            reason[:2000],
+            json.dumps(
+                {"phase": "cancelled", "pct": 0, "message": reason},
+                ensure_ascii=False,
+            ),
+            job_id,
+        ),
+    )
+    ok = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return ok
+
+
+def cancel_current_job(reason: str = "Cancelado por el usuario") -> dict | None:
+    running = get_running_jobs()
+    if not running:
+        return None
+    job_id = running[0]["id"]
+    if not cancel_job(job_id, reason):
+        return None
+    return get_job(job_id)
+
+
+def get_current_job() -> dict | None:
+    running = get_running_jobs()
+    return running[0] if running else None
+
+
+def update_cancelled_stats(job_id: int, stats: dict) -> None:
+    """Guarda stats parciales al cancelar (propuestas ya insertadas)."""
+    if not stats:
+        return
+    conn = _conn()
+    conn.execute(
+        "UPDATE ai_jobs SET stats_json=? WHERE id=? AND status='cancelled'",
+        (json.dumps(stats, ensure_ascii=False), job_id),
     )
     conn.commit()
     conn.close()

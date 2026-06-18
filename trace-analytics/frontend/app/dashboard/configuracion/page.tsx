@@ -8,7 +8,9 @@ import {
   getChatHistory,
   getFilterHistory,
   recomputeAI,
+  getAICurrentJob,
   getAIJobStatus,
+  cancelAIJob,
   getAILatestJobs,
   getAIStats,
   type AIJob,
@@ -145,53 +147,110 @@ function fmtJobDate(iso: string | null | undefined) {
   } catch { return iso; }
 }
 
+/** Timestamp del inicio real del job en el servidor (no cuando se abrió la página). */
+function parseJobStartedAt(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  try {
+    const t = new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
+    return Number.isNaN(t) ? null : t;
+  } catch {
+    return null;
+  }
+}
+
+function jobElapsedSeconds(job: AIJob, now = Date.now()): number | null {
+  const start = parseJobStartedAt(job.started_at);
+  if (start == null) return null;
+  const end =
+    job.status === "running" || job.status === "pending"
+      ? now
+      : parseJobStartedAt(job.finished_at) ?? now;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
 function AIAnalysisSection() {
   const [jobType,  setJobType]  = useState<"conexiones" | "redundancia" | "all">("conexiones");
   const [carrera,  setCarrera]  = useState("");
-  const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error">("idle");
-  const [jobId,    setJobId]    = useState<number | null>(null);
+  const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error" | "cancelled">("idle");
   const [job,      setJob]      = useState<AIJob | null>(null);
   const [latest,   setLatest]   = useState<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] } | null>(null);
   const [stats,    setStats]    = useState<AIStats | null>(null);
   const [msg,      setMsg]      = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed,  setElapsed]  = useState(0);
+  const [cancelling, setCancelling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeJobIdRef = useRef<number | null>(null);
 
-  const pollJob = async (id: number) => {
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (elapsedRef.current) {
+      clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
+    }
+  };
+
+  const syncElapsedFromJob = (j: AIJob) => {
+    const start = parseJobStartedAt(j.started_at);
+    if (start == null) return;
+    setStartedAt(start);
+    const sec = jobElapsedSeconds(j);
+    if (sec != null) setElapsed(sec);
+  };
+
+  const pollJob = async (): Promise<boolean> => {
     try {
-      const j = await getAIJobStatus(id);
+      let j: AIJob;
+      try {
+        j = await getAICurrentJob();
+      } catch {
+        if (!activeJobIdRef.current) return false;
+        j = await getAIJobStatus(activeJobIdRef.current);
+      }
       setJob(j);
+      activeJobIdRef.current = j.id;
+      if (j.status === "running" || j.status === "pending") {
+        setPhase("running");
+        syncElapsedFromJob(j);
+      }
       if (j.status === "done") {
         setPhase("done");
-        setMsg(`Análisis completado. Revisa Conexiones IA o Redundancia.`);
+        syncElapsedFromJob(j);
+        setMsg("Análisis completado. Revisa Conexiones IA o Redundancia.");
         getAILatestJobs().then(setLatest).catch(() => {});
         getAIStats().then(setStats).catch(() => {});
         return true;
       }
       if (j.status === "error") {
         setPhase("error");
-        setMsg(j.error_msg || "El job falló sin mensaje de error.");
+        syncElapsedFromJob(j);
+        setMsg(j.error_msg || "El análisis falló sin mensaje de error.");
+        return true;
+      }
+      if (j.status === "cancelled") {
+        setPhase("cancelled");
+        syncElapsedFromJob(j);
+        setMsg(j.error_msg || "Análisis cancelado.");
+        getAIStats().then(setStats).catch(() => {});
         return true;
       }
       return false;
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Error consultando estado del job");
+      setMsg(e instanceof Error ? e.message : "Error consultando el estado del análisis");
       return false;
     }
   };
 
-  const startPolling = (id: number) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollJob(id);
+  const startPolling = () => {
+    stopPolling();
+    pollJob();
     pollRef.current = setInterval(async () => {
-      const finished = await pollJob(id);
-      if (finished && pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-        if (elapsedRef.current) clearInterval(elapsedRef.current);
-      }
+      const finished = await pollJob();
+      if (finished) stopPolling();
     }, 2000);
   };
 
@@ -201,28 +260,25 @@ function AIAnalysisSection() {
         setLatest(r);
         if (r.running?.length > 0) {
           const active = r.running[0];
-          setJobId(active.id);
+          activeJobIdRef.current = active.id;
           setJob(active);
           setPhase("running");
-          setStartedAt(Date.now());
-          setMsg(`Job #${active.id} en curso — retomando seguimiento…`);
-          startPolling(active.id);
+          syncElapsedFromJob(active);
+          setMsg("Análisis en curso — retomando seguimiento…");
+          startPolling();
         }
       })
       .catch(() => {});
     getAIStats().then(setStats).catch(() => {});
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    return () => stopPolling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (phase !== "running" || !startedAt) return;
-    elapsedRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
+    if (phase !== "running" || startedAt == null) return;
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    tick();
+    elapsedRef.current = setInterval(tick, 1000);
     return () => { if (elapsedRef.current) clearInterval(elapsedRef.current); };
   }, [phase, startedAt]);
 
@@ -230,26 +286,45 @@ function AIAnalysisSection() {
     setMsg("");
     setJob(null);
     setPhase("starting");
-    setStartedAt(Date.now());
+    setStartedAt(null);
     setElapsed(0);
+    activeJobIdRef.current = null;
     try {
       const r = await recomputeAI(jobType, carrera || undefined);
-      setJobId(r.job_id);
+      activeJobIdRef.current = r.job_id;
       setPhase("running");
       if (r.already_running) {
-        setMsg(`Job #${r.job_id} ya estaba en curso — mostrando progreso.`);
+        setMsg("Ya había un análisis en curso — mostrando progreso.");
       } else {
-        setMsg(`Job #${r.job_id} iniciado. Cada curso tarda ~2–5 s (Groq).`);
+        setMsg("Análisis iniciado. Cada curso tarda ~2–5 s (Groq).");
       }
-      startPolling(r.job_id);
+      startPolling();
     } catch (e) {
       setPhase("error");
-      setMsg(e instanceof Error ? e.message : "Error al iniciar el job.");
+      setMsg(e instanceof Error ? e.message : "Error al iniciar el análisis.");
+    }
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      const r = await cancelAIJob();
+      setJob(r.job);
+      activeJobIdRef.current = r.job.id;
+      setPhase("cancelled");
+      syncElapsedFromJob(r.job);
+      setMsg("Análisis cancelado.");
+      stopPolling();
+      getAIStats().then(setStats).catch(() => {});
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "No se pudo cancelar el análisis.");
+    } finally {
+      setCancelling(false);
     }
   }
 
   const statusColor: Record<string, string> = {
-    pending: "#F59E0B", running: "#3B82F6", done: "#10B981", error: "#EF4444",
+    pending: "#F59E0B", running: "#3B82F6", done: "#10B981", error: "#EF4444", cancelled: "#F59E0B",
   };
 
   const progress = job?.progress;
@@ -305,7 +380,7 @@ function AIAnalysisSection() {
             ))}
           </select>
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <button
             disabled={isBusy}
             onClick={handleRecompute}
@@ -314,29 +389,44 @@ function AIAnalysisSection() {
             <RefreshCw size={13} className={isBusy ? "animate-spin" : ""} />
             {phase === "starting" ? "Iniciando…" : isBusy ? "Procesando…" : "Recalcular"}
           </button>
+          {isBusy && (
+            <button
+              disabled={cancelling || phase === "starting"}
+              onClick={handleCancel}
+              className="px-4 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-md hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+            >
+              {cancelling ? "Cancelando…" : "Cancelar"}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Panel de progreso */}
-      {(isBusy || phase === "done" || phase === "error") && (
+      {(isBusy || phase === "done" || phase === "error" || phase === "cancelled") && (
         <div className={`border rounded-lg p-4 mb-3 text-[12px] ${
           phase === "error" ? "border-[#FECACA] bg-[#FEF2F2]" :
           phase === "done" ? "border-[#BBF7D0] bg-[#F0FDF4]" :
+          phase === "cancelled" ? "border-[#FDE68A] bg-[#FFFBEB]" :
           "border-[#BFDBFE] bg-[#EFF6FF]"
         }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              {jobId && <span className="font-semibold text-[#111827]">Job #{jobId}</span>}
               {job && (
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{ color: statusColor[job.status] ?? "#6B7280", background: (statusColor[job.status] ?? "#6B7280") + "18" }}
                 >
-                  {job.status === "running" ? "En progreso" : job.status === "done" ? "Completado" : job.status === "error" ? "Error" : job.status}
+                  {job.status === "running" ? "En progreso" :
+                   job.status === "done" ? "Completado" :
+                   job.status === "error" ? "Error" :
+                   job.status === "cancelled" ? "Cancelado" : job.status}
                 </span>
               )}
+              {!job && phase === "starting" && (
+                <span className="text-[11px] text-[#6B7280]">Iniciando…</span>
+              )}
             </div>
-            {isBusy && startedAt && (
+            {(startedAt && elapsed > 0) && (
               <span className="text-[11px] text-[#6B7280]">Tiempo: {fmtElapsed(elapsed)}</span>
             )}
           </div>
@@ -383,6 +473,10 @@ function AIAnalysisSection() {
           {phase === "error" && (
             <p className="text-[#DC2626]">{msg || job?.error_msg}</p>
           )}
+
+          {phase === "cancelled" && (
+            <p className="text-[#92400E]">{msg || job?.error_msg || "Análisis cancelado."}</p>
+          )}
         </div>
       )}
 
@@ -392,10 +486,10 @@ function AIAnalysisSection() {
 
       <div className="text-[11px] text-[#9CA3AF] space-y-0.5">
         {latest?.conexiones && (
-          <p>Último job conexiones: #{latest.conexiones.id} completado {fmtJobDate(latest.conexiones.finished_at)}</p>
+          <p>Último análisis de conexiones: {fmtJobDate(latest.conexiones.finished_at)}</p>
         )}
         {latest?.redundancia && (
-          <p>Último job redundancia: #{latest.redundancia.id} completado {fmtJobDate(latest.redundancia.finished_at)}</p>
+          <p>Último análisis de redundancia: {fmtJobDate(latest.redundancia.finished_at)}</p>
         )}
         {phase === "idle" && !latest?.conexiones && !latest?.redundancia && (
           <p>Aún no se ha ejecutado ningún análisis IA. Haz clic en Recalcular para iniciar.</p>
