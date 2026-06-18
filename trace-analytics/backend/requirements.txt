@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 passlib
 python-multipart
 httpx
+scikit-learn==1.5.2

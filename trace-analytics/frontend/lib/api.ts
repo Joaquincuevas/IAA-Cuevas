@@ -96,12 +96,146 @@ export async function getCobertura(carrera?: string) {
   }>(`/api/cobertura${q}`);
 }
 
-export async function getRedundancia() {
-  return apiFetch<{
-    kpi: { tasa_redundancia_pct: number; total_ras: number; ras_sobre_cubiertos: number; ras_huerfanos: number };
-    overcovered: { id_objetivo: string; cursos_demandantes: number; cursos_lista: string[]; descripcion: string }[];
-    orphans: { id_objetivo: string; descripcion: string }[];
-  }>("/api/redundancia");
+// ── AI módulo: Conexiones RA→PE y Redundancia semántica ──────────────────────
+
+export type AIRaPeProposal = {
+  id: number;
+  job_id: number;
+  carrera: string;
+  ra_id: string;
+  ra_texto: string;
+  curso_id: string;
+  curso_nombre: string;
+  pe_id: string;
+  pe_texto: string;
+  confianza: number;
+  razon: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type AIRedundancyProposal = {
+  id: number;
+  job_id: number;
+  carrera: string;
+  ra_id_a: string;
+  ra_texto_a: string;
+  curso_a: string;
+  ra_id_b: string;
+  ra_texto_b: string;
+  curso_b: string;
+  similitud: number;
+  razon: string;
+  tipo: "semantica" | "curricular";
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type AIJobProgress = {
+  phase: string;
+  step: number;
+  total_steps: number;
+  pct: number;
+  message: string;
+  propuestas?: number;
+  errores?: number;
+  curso?: string;
+  updated_at?: string;
+};
+
+export type AIJob = {
+  id: number;
+  job_type: string;
+  carrera: string | null;
+  status: "pending" | "running" | "done" | "error";
+  excel_hash: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error_msg: string | null;
+  stats: Record<string, unknown>;
+  progress: AIJobProgress;
+};
+
+export type AIStats = {
+  ra_pe: { total: number; pending: number; approved: number; rejected: number };
+  redundancia: { total: number; pending: number };
+};
+
+export async function getAIConexiones(params?: {
+  carrera?: string;
+  status?: string;
+  curso?: string;
+  pe?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.carrera) q.set("carrera", params.carrera);
+  if (params?.status) q.set("status", params.status);
+  if (params?.curso) q.set("curso", params.curso);
+  if (params?.pe) q.set("pe", params.pe);
+  if (params?.limit !== undefined) q.set("limit", String(params.limit));
+  if (params?.offset !== undefined) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return apiFetch<{ proposals: AIRaPeProposal[]; total: number; limit: number; offset: number }>(
+    `/api/ai/conexiones${qs ? "?" + qs : ""}`
+  );
+}
+
+export async function getAIRedundancia(params?: {
+  carrera?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.carrera) q.set("carrera", params.carrera);
+  if (params?.status) q.set("status", params.status);
+  if (params?.limit !== undefined) q.set("limit", String(params.limit));
+  if (params?.offset !== undefined) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return apiFetch<{ proposals: AIRedundancyProposal[]; total: number }>(
+    `/api/ai/redundancia${qs ? "?" + qs : ""}`
+  );
+}
+
+export async function castAIVote(
+  targetType: "ra_pe" | "redundancy",
+  targetId: number,
+  voto: "approve" | "reject",
+  comentario?: string
+) {
+  return apiFetch<{ proposal: AIRaPeProposal | AIRedundancyProposal }>("/api/ai/votes", {
+    method: "POST",
+    body: JSON.stringify({ target_type: targetType, target_id: targetId, voto, comentario }),
+  });
+}
+
+export async function recomputeAI(jobType: "conexiones" | "redundancia" | "all", carrera?: string) {
+  return apiFetch<{ job_id: number; status: string; message: string; already_running?: boolean }>(
+    "/api/ai/recompute",
+    { method: "POST", body: JSON.stringify({ job_type: jobType, carrera }) }
+  );
+}
+
+export async function getAIJobStatus(jobId: number) {
+  return apiFetch<AIJob>(`/api/ai/jobs/${jobId}`);
+}
+
+export async function getAILatestJobs() {
+  return apiFetch<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] }>(
+    "/api/ai/jobs/latest"
+  );
+}
+
+export async function getAIStats(carrera?: string) {
+  const q = carrera ? `?carrera=${carrera}` : "";
+  return apiFetch<AIStats>(`/api/ai/stats${q}`);
+}
+
+export async function exportAIConexiones(carrera?: string) {
+  const q = carrera ? `?carrera=${carrera}` : "";
+  return apiFetch<{ conexiones: AIRaPeProposal[]; total: number }>(`/api/ai/export/conexiones${q}`);
 }
 
 export async function taulaChat(message: string, history: { role: string; content: string }[]) {
@@ -147,34 +281,3 @@ export async function getCoberturaTributaciones(carrera: string) {
   );
 }
 
-export type PESummaryItem = {
-  alta: number;
-  media: number;
-  baja: number;
-  cubierta: boolean;
-  descripcion: string;
-};
-
-export type RAMapping = {
-  ra_id: string;
-  ra_texto: string;
-  ra_texto_completo: string;
-  curso_id: string;
-  curso_nombre: string;
-  carrera: string;
-  nivel: "Alta" | "Media" | "Baja";
-  pe_list: string[];
-};
-
-export type TrazabilidadData = {
-  mappings: RAMapping[];
-  pe_summary: Record<string, Record<string, PESummaryItem>>;
-  total_mappings: number;
-  carreras_disponibles: string[];
-  carrera_filtrada: string | null;
-};
-
-export async function getTrazabilidad(carrera?: string) {
-  const q = carrera ? `?carrera=${carrera}` : "";
-  return apiFetch<TrazabilidadData>(`/api/trazabilidad${q}`);
-}

@@ -12,10 +12,13 @@ import pandas as pd
 import networkx as nx
 from pathlib import Path
 import os
+import threading
 from collections import defaultdict
 from dotenv import load_dotenv
 from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre, generar_resumen_tributacion
 import auth_db
+import ai_db
+import ai_engine
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -52,6 +55,10 @@ def get_matrices() -> dict:
 async def lifespan(app_: FastAPI):
     global _matrices_cache
     auth_db.init_db()
+    ai_db.init_ai_tables()
+    n_orphans = ai_db.recover_orphan_jobs()
+    if n_orphans:
+        print(f"AI jobs huérfanos marcados como error: {n_orphans}")
     try:
         df_cursos, df_tributacion, df_competencias = parse_todas_las_matrices(DATA_FOLDER)
         _matrices_cache = {
@@ -265,25 +272,6 @@ def get_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_to
         },
     }
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def _course_to_semester(course_id: str) -> int:
-    """Derive academic semester (1-10) from a course ID like 'ICA_3102'."""
-    try:
-        num = course_id.split("_")[1]
-        year = int(num[0])
-        units = int(num[-1])
-        half = 1 if units % 2 == 1 else 2
-        sem = (year - 1) * 2 + half
-        return min(max(sem, 1), 10)
-    except Exception:
-        return 1
-
-def _importancia_to_nivel(importancia: str) -> str:
-    """Map Importancia label to nivel letter: Alta→c, Media→b, Baja→a."""
-    return {"alta": "c", "media": "b", "baja": "a"}.get(
-        str(importancia).strip().lower(), "a"
-    )
-
 # ── Cobertura (matrices de tributación) ───────────────────────────────────────
 
 CARRERAS_MATRICES = ["ICA", "ICC", "ICE", "IOC", "ICI"]
@@ -422,103 +410,6 @@ def get_cursos_competencia(carrera: str, competencia_id: int, email: str = Depen
     return {"cursos": cursos}
 
 
-# ── Redundancia ────────────────────────────────────────────────────────────────
-_NIVEL_ORDER = {"a": 1, "b": 2, "c": 3}
-
-@app.get("/api/redundancia")
-def get_redundancia(email: str = Depends(verify_token)):
-    data = get_data()
-    objectives = data["objectives"]
-    ra_links = data["ra_links"]
-
-    all_obj_ids = set(objectives["ID_Objetivo"].tolist())
-
-    # Description lookup for objectives
-    obj_to_desc: dict = {}
-    for _, row in objectives.iterrows():
-        oid = str(row["ID_Objetivo"]).strip()
-        desc = str(row["Objetivo"]).strip() if pd.notna(row.get("Objetivo", float("nan"))) else ""
-        obj_to_desc[oid] = desc
-
-    # Build per-RA sequence: ra_id → {course_id: best_nivel}
-    # Deduplicate (course, nivel) per RA by keeping the highest nivel per course
-    ra_best: dict[str, dict[str, str]] = defaultdict(dict)
-
-    for _, row in ra_links.iterrows():
-        ra_id = str(row["ID_Objetivo_Prerrequisito"]).strip()
-        course_id = str(row["ID"]).strip()
-        nivel = _importancia_to_nivel(str(row.get("Importancia", "Baja")))
-        existing = ra_best[ra_id].get(course_id)
-        if existing is None or _NIVEL_ORDER.get(nivel, 0) > _NIVEL_ORDER.get(existing, 0):
-            ra_best[ra_id][course_id] = nivel
-
-    # Detect stagnation: a level L is stagnant if ≥3 courses require this RA at level L
-    # and no course requires it at a higher level
-    detalle: list[dict] = []
-    for ra_id, course_nivel_map in ra_best.items():
-        entries = [
-            (cid, niv, _course_to_semester(cid))
-            for cid, niv in course_nivel_map.items()
-        ]
-        entries.sort(key=lambda x: x[2])  # sort by semestre
-
-        max_nivel_val = max((_NIVEL_ORDER.get(e[1], 0) for e in entries), default=0)
-
-        for nivel_check in ("a", "b", "c"):
-            nivel_val = _NIVEL_ORDER[nivel_check]
-            at_this_level = [(cid, sem) for cid, niv, sem in entries if niv == nivel_check]
-            if len(at_this_level) >= 3 and max_nivel_val <= nivel_val:
-                severidad = "alta" if len(at_this_level) >= 5 else "media"
-                detalle.append({
-                    "id_objetivo": ra_id,
-                    "descripcion": obj_to_desc.get(ra_id, ""),
-                    "nivel_repetido": nivel_check,
-                    "cursos": [c[0] for c in at_this_level],
-                    "semestres": [c[1] for c in at_this_level],
-                    "severidad": severidad,
-                    "cursos_demandantes": len(at_this_level),
-                    "cursos_lista": [c[0] for c in at_this_level],
-                })
-                break  # report only the lowest stagnant level per RA
-
-    detalle.sort(key=lambda x: x["cursos_demandantes"], reverse=True)
-
-    # Orphans: objectives not referenced as a goal (ID_Objetivo) in any link
-    linked_objs = set(ra_links["ID_Objetivo"].tolist())
-    orphan_ids = sorted(all_obj_ids - linked_objs)
-    orphan_list = [
-        {"id_objetivo": oid, "descripcion": obj_to_desc.get(oid, "")}
-        for oid in orphan_ids
-    ]
-
-    total_ras = len(all_obj_ids)
-    redundant_count = len(detalle)
-    redundancy_pct = round(redundant_count / total_ras * 100, 1) if total_ras > 0 else 0.0
-
-    # Build overcovered list compatible with frontend field names
-    overcovered_list = [
-        {
-            "id_objetivo": item["id_objetivo"],
-            "descripcion": item["descripcion"],
-            "cursos_demandantes": item["cursos_demandantes"],
-            "cursos_lista": item["cursos_lista"],
-        }
-        for item in detalle
-    ]
-
-    return {
-        "kpi": {
-            "tasa_redundancia_pct": redundancy_pct,
-            "total_ras": total_ras,
-            "ras_sobre_cubiertos": redundant_count,
-            "ras_huerfanos": len(orphan_ids),
-        },
-        "overcovered": overcovered_list,
-        "orphans": orphan_list,
-        "detalle": detalle,
-    }
-
-
 @app.get("/api/objectives")
 def get_objectives(email: str = Depends(verify_token)):
     """Devuelve la lista de objetivos con su descripción (columna 'Objetivo' si existe)."""
@@ -572,122 +463,6 @@ def get_objectives_public():
     return {"objectives": rows}
 
 
-# ── Trazabilidad RA → PE ───────────────────────────────────────────────────────
-@app.get("/api/trazabilidad")
-def get_trazabilidad(carrera: Optional[str] = None, email: str = Depends(verify_token)):
-    data = get_data()
-    df_obj = data["objectives"]   # ID, ID_Objetivo, Nombre, Objetivo, Carrera
-    df_links = data["ra_links"]   # ID, ID_Objetivo, Importancia, ...
-    matrices = get_matrices()
-    df_tributacion: pd.DataFrame = matrices["tributacion"]
-    df_competencias: pd.DataFrame = matrices["competencias"]
-
-    carrera_filter = carrera.upper().strip() if carrera else None
-    if carrera_filter and carrera_filter not in CARRERAS_MATRICES:
-        raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
-
-    # Paso 1: max Importancia per RA (ID_Objetivo) from RA_Links
-    _imp_ord = {"Alta": 3, "Media": 2, "Baja": 1}
-    ra_nivel: dict[str, str] = {}
-    for _, row in df_links.iterrows():
-        ra_id = str(row["ID_Objetivo"]).strip()
-        imp = str(row.get("Importancia", "Baja")).strip()
-        if imp not in _imp_ord:
-            imp = "Baja"
-        if ra_id not in ra_nivel or _imp_ord[imp] > _imp_ord[ra_nivel[ra_id]]:
-            ra_nivel[ra_id] = imp
-
-    # Paso 2: course_pe_map[carrera][curso_norm] = sorted list of PE labels
-    # df_tributacion.codigo_curso has no underscore (ICA3102)
-    course_pe_map: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
-    for _, row in df_tributacion.iterrows():
-        car = str(row["carrera"]).strip()
-        curso = str(row["codigo_curso"]).strip()
-        pe_label = f"PE{int(row['competencia_id'])}"
-        if pe_label not in course_pe_map[car][curso]:
-            course_pe_map[car][curso].append(pe_label)
-
-    # Paso 3: PE descriptions and ordered labels per carrera
-    pe_desc: dict[str, dict[str, str]] = defaultdict(dict)
-    for _, row in df_competencias.iterrows():
-        car = str(row["carrera"]).strip()
-        pe_label = f"PE{int(row['competencia_id'])}"
-        pe_desc[car][pe_label] = str(row["competencia_texto"]).strip()
-
-    def _pe_sort_key(label: str) -> int:
-        try:
-            return int(label[2:])
-        except ValueError:
-            return 999
-
-    # Paso 4: cross objectives × matrices × nivel
-    mappings: list[dict] = []
-    for _, row in df_obj.iterrows():
-        curso_id = str(row["ID"]).strip()         # ICA_3102
-        ra_id = str(row["ID_Objetivo"]).strip()   # ICA_3102-1
-        ra_texto = str(row.get("Objetivo", "")).strip()
-        curso_nombre = str(row.get("Nombre", "")).strip()
-        ra_carrera = curso_id[:3]
-
-        if carrera_filter and ra_carrera != carrera_filter:
-            if not curso_id.startswith("ING"):
-                continue
-
-        # Normalize: ICA_3102 → ICA3102
-        curso_norm = curso_id.replace("_", "", 1)
-
-        pe_list = list(course_pe_map[ra_carrera].get(curso_norm, []))
-        # ING courses: also search in filtered carrera's matrix
-        if not pe_list and carrera_filter and curso_id.startswith("ING"):
-            pe_list = list(course_pe_map[carrera_filter].get(curso_norm, []))
-
-        pe_list = sorted(pe_list, key=_pe_sort_key)
-        nivel = ra_nivel.get(ra_id, "Baja")
-
-        mappings.append({
-            "ra_id": ra_id,
-            "ra_texto": ra_texto[:120],
-            "ra_texto_completo": ra_texto,
-            "curso_id": curso_id,
-            "curso_nombre": curso_nombre,
-            "carrera": ra_carrera,
-            "nivel": nivel,
-            "pe_list": pe_list,
-        })
-
-    # Paso 5: PE summary per carrera
-    carreras_to_summarize = [carrera_filter] if carrera_filter else CARRERAS_MATRICES
-    pe_summary: dict[str, dict[str, dict]] = {}
-    for car in carreras_to_summarize:
-        pe_summary[car] = {}
-        all_pes = sorted(pe_desc.get(car, {}).keys(), key=_pe_sort_key)
-        for pe_label in all_pes:
-            car_mappings = [
-                m for m in mappings
-                if pe_label in m["pe_list"] and (m["carrera"] == car or (
-                    carrera_filter and m["curso_id"].startswith("ING")
-                ))
-            ]
-            alta = sum(1 for m in car_mappings if m["nivel"] == "Alta")
-            media = sum(1 for m in car_mappings if m["nivel"] == "Media")
-            baja = sum(1 for m in car_mappings if m["nivel"] == "Baja")
-            pe_summary[car][pe_label] = {
-                "alta": alta,
-                "media": media,
-                "baja": baja,
-                "cubierta": alta > 0,
-                "descripcion": pe_desc.get(car, {}).get(pe_label, ""),
-            }
-
-    return JSONResponse(content=jsonable_encoder({
-        "mappings": mappings,
-        "pe_summary": pe_summary,
-        "total_mappings": len(mappings),
-        "carreras_disponibles": CARRERAS_MATRICES,
-        "carrera_filtrada": carrera_filter,
-    }))
-
-
 # ── Taula ──────────────────────────────────────────────────────────────────────
 class ChatMessage(BaseModel):
     role: str
@@ -735,20 +510,20 @@ IOC (Obras Civiles), ICI (Civil), ING (Industrial), ICE (Eléctrica), ICC (Compu
 ## Estadísticas
 {stats.get('n_cursos', 139)} cursos · {stats.get('n_objetivos', 672)} RAs · {stats.get('n_links', 925)} vínculos RA↔prerrequisito
 
-## Niveles de tributación
-A=Alta (dominio pleno, cuenta para cobertura PE) · M=Media (desarrollo) · B=Baja (introducción)
+## Importancia de los RAs en RA_Links
+Alta = dominio pleno · Media = en desarrollo · Baja = introducción
 
-## Cobertura real por carrera
-- ICA (Ambiental): 78.3% — 18/23 PEs con nivel Alta
-- ICC (Computación): 78.9% — 15/19 PEs con nivel Alta
-- ICE (Eléctrica): 81.0% — 17/21 PEs con nivel Alta
-- IOC (Obras Civiles): 75.9% — 22/29 PEs con nivel Alta
-- ICI (Civil): 81.0% — 17/21 PEs con nivel Alta
-PE1–PE4 sin cobertura Alta en todas las carreras (competencias transversales humanísticas — esperado).
+## Cobertura real por carrera (PE cubiertos)
+- ICA (Ambiental): 18/23 PEs con tributación directa
+- ICC (Computación): 15/19 PEs
+- ICE (Eléctrica): 17/21 PEs
+- IOC (Obras Civiles): 22/29 PEs
+- ICI (Civil): 17/21 PEs
 
 ## Reglas de análisis
-- Redundancia: RA en ≥3 cursos con el MISMO nivel sin progresión. Progresión B→M→A es deseable.
-- Cobertura PE: solo cuentan RAs de nivel Alta. Media y Baja son formación previa.
+- Cobertura PE: porcentaje de semestres con al menos 1 curso tributando al PE.
+- Conexiones RA→PE: propuestas generadas por IA que deben ser validadas por usuarios.
+- Redundancia: pares de objetivos semánticamente similares detectados por IA.
 - Responde siempre en español, código de curso exacto (ej: ICA3102), conciso.
 
 ## Matrices de Tributación (curso → PEs que cubre)
@@ -841,54 +616,14 @@ def get_dashboard_summary(email: str = Depends(verify_token)):
 
         kpi1_global = round(sum(kpi1_values) / len(kpi1_values), 1) if kpi1_values else 0.0
 
-    # ── KPI2 per carrera (from ra_links Importancia levels) ────────────────────
+    # ── RA stats ──────────────────────────────────────────────────────────────
     all_obj_ids = set(objectives["ID_Objetivo"].tolist())
     total_ras = len(all_obj_ids)
     linked_objs = set(ra_links["ID_Objetivo"].tolist())
     ras_huerfanos = len(all_obj_ids - linked_objs)
 
-    # Build per-RA best nivel per course (same logic as get_redundancia)
-    ra_best: dict[str, dict[str, str]] = defaultdict(dict)
-    for _, row in ra_links.iterrows():
-        ra_id = str(row["ID_Objetivo_Prerrequisito"]).strip()
-        course_id = str(row["ID"]).strip()
-        nivel = _importancia_to_nivel(str(row.get("Importancia", "Baja")))
-        existing = ra_best[ra_id].get(course_id)
-        if existing is None or _NIVEL_ORDER.get(nivel, 0) > _NIVEL_ORDER.get(existing, 0):
-            ra_best[ra_id][course_id] = nivel
-
-    # Detect stagnant RAs and tag by carrera
-    carrera_redundant: dict[str, int] = defaultdict(int)
-    total_redundant = 0
-
-    for ra_id, course_nivel_map in ra_best.items():
-        entries = [
-            (cid, niv, _course_to_semester(cid))
-            for cid, niv in course_nivel_map.items()
-        ]
-        max_nivel_val = max((_NIVEL_ORDER.get(e[1], 0) for e in entries), default=0)
-        for nivel_check in ("a", "b", "c"):
-            at_level = [e for e in entries if e[1] == nivel_check]
-            if len(at_level) >= 3 and max_nivel_val <= _NIVEL_ORDER[nivel_check]:
-                total_redundant += 1
-                # Tag by carrera of the RA id (format: "CAR_XXXX-N")
-                carrera_tag = ra_id.split("_")[0] if "_" in ra_id else ""
-                if carrera_tag in por_carrera:
-                    carrera_redundant[carrera_tag] += 1
-                break
-
-    kpi2_global = round(total_redundant / total_ras * 100, 1) if total_ras > 0 else 0.0
-
-    for carrera in CARRERA_NAMES:
-        n = carrera_redundant.get(carrera, 0)
-        # Count RAs belonging to this carrera
-        n_ra_carrera = sum(
-            1 for oid in all_obj_ids
-            if oid.split("_")[0] == carrera
-        )
-        por_carrera[carrera]["kpi2"] = (
-            round(n / n_ra_carrera * 100, 1) if n_ra_carrera > 0 else 0.0
-        )
+    # ── AI stats from SQLite ──────────────────────────────────────────────────
+    ai_stats = ai_db.get_ai_stats()
 
     n_competencias_sin_cobertura = 0
     if _matrices_cache is not None:
@@ -903,16 +638,174 @@ def get_dashboard_summary(email: str = Depends(verify_token)):
 
     return {
         "kpi1_global": kpi1_global,
-        "kpi2_global": kpi2_global,
         "n_cursos": len(data["general"]),
         "n_objetivos": total_ras,
         "n_links": len(ra_links),
         "n_carreras": len(CARRERA_NAMES),
         "ras_huerfanos": ras_huerfanos,
-        "ras_sobrecubiertos": total_redundant,
         "competencias_sin_cobertura": n_competencias_sin_cobertura,
         "por_carrera": por_carrera,
+        "ai_stats": ai_stats,
     }
+
+
+# ── AI Módulo: conexiones RA→PE y redundancia semántica ──────────────────────
+
+class RecomputeRequest(BaseModel):
+    job_type: str = "all"     # 'conexiones' | 'redundancia' | 'all'
+    carrera: Optional[str] = None
+
+
+class VoteRequest(BaseModel):
+    target_type: str          # 'ra_pe' | 'redundancy'
+    target_id: int
+    voto: str                 # 'approve' | 'reject'
+    comentario: Optional[str] = None
+
+
+@app.post("/api/ai/recompute")
+def recompute_ai(req: RecomputeRequest, email: str = Depends(verify_token)):
+    """Inicia un job batch de análisis IA en background thread."""
+    if req.job_type not in ("conexiones", "redundancia", "all"):
+        raise HTTPException(status_code=400, detail="job_type debe ser 'conexiones', 'redundancia' o 'all'")
+
+    carrera = req.carrera.upper().strip() if req.carrera else None
+    if carrera and carrera not in CARRERAS_MATRICES:
+        raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
+
+    # Check if a job is already running
+    running = ai_db.get_running_jobs()
+    if running:
+        return {"message": "Ya hay un job en curso", "job_id": running[0]["id"], "already_running": True}
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY no configurada")
+
+    # Compute Excel hash for cache invalidation
+    excel_paths = [DATA_PATH] + [
+        DATA_FOLDER / fname
+        for fname in [
+            "Matriz Tributación PE 2022 AMBIENTAL.xlsx",
+            "Matriz Tributación PE 2022 COMPUTACION.xlsx",
+            "Matriz Tributación PE 2022 ELECTRICA.xlsx",
+            "Matriz Tributación PE 2022 OBRAS CIVILES.xlsx",
+            "Matriz Tributación PE 2023 INDUSTRIAL.xlsx",
+        ]
+    ]
+    new_hash = ai_engine.excel_hash([p for p in excel_paths if p.exists()])
+
+    job_id = ai_db.create_job(req.job_type, carrera, new_hash)
+
+    data = get_data()
+    matrices = get_matrices()
+
+    t = threading.Thread(
+        target=ai_engine.run_job,
+        args=(job_id, req.job_type, carrera, groq_key, data, matrices),
+        daemon=True,
+    )
+    t.start()
+
+    return {"job_id": job_id, "status": "running", "message": f"Job {req.job_type} iniciado"}
+
+
+@app.get("/api/ai/jobs/latest")
+def get_latest_jobs(email: str = Depends(verify_token)):
+    """Último job completado por tipo."""
+    return {
+        "conexiones": ai_db.get_latest_job("conexiones") or ai_db.get_latest_job("all"),
+        "redundancia": ai_db.get_latest_job("redundancia") or ai_db.get_latest_job("all"),
+        "running": ai_db.get_running_jobs(),
+    }
+
+
+@app.get("/api/ai/jobs/{job_id}")
+def get_job_status(job_id: int, email: str = Depends(verify_token)):
+    job = ai_db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    return job
+
+
+@app.get("/api/ai/conexiones")
+def get_ai_conexiones(
+    carrera: Optional[str] = None,
+    status: Optional[str] = None,
+    curso: Optional[str] = None,
+    pe: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    email: str = Depends(verify_token),
+):
+    """Lista paginada de propuestas RA→PE con filtros."""
+    proposals = ai_db.get_ra_pe_proposals(
+        carrera=carrera.upper() if carrera else None,
+        status=status,
+        curso=curso,
+        pe=pe,
+        limit=limit,
+        offset=offset,
+    )
+    total = ai_db.count_ra_pe_proposals(
+        carrera=carrera.upper() if carrera else None,
+        status=status,
+    )
+    return JSONResponse(content=jsonable_encoder({
+        "proposals": proposals,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }))
+
+
+@app.get("/api/ai/redundancia")
+def get_ai_redundancia(
+    carrera: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    email: str = Depends(verify_token),
+):
+    """Lista paginada de pares redundantes semánticos."""
+    proposals = ai_db.get_redundancy_proposals(
+        carrera=carrera.upper() if carrera else None,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    return JSONResponse(content=jsonable_encoder({
+        "proposals": proposals,
+        "total": len(proposals),
+        "limit": limit,
+        "offset": offset,
+    }))
+
+
+@app.post("/api/ai/votes")
+def cast_vote(req: VoteRequest, email: str = Depends(verify_token)):
+    """Emite un voto sobre una propuesta RA→PE o de redundancia."""
+    if req.target_type not in ("ra_pe", "redundancy"):
+        raise HTTPException(status_code=400, detail="target_type debe ser 'ra_pe' o 'redundancy'")
+    if req.voto not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="voto debe ser 'approve' o 'reject'")
+    updated = ai_db.cast_vote(email, req.target_type, req.target_id, req.voto, req.comentario)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+    return JSONResponse(content=jsonable_encoder({"proposal": updated}))
+
+
+@app.get("/api/ai/stats")
+def get_ai_stats_endpoint(carrera: Optional[str] = None, email: str = Depends(verify_token)):
+    """KPIs del módulo IA: pendientes, aprobadas, rechazadas."""
+    return ai_db.get_ai_stats(carrera=carrera.upper() if carrera else None)
+
+
+@app.get("/api/ai/export/conexiones")
+def export_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_token)):
+    """Devuelve propuestas aprobadas para exportar."""
+    approved = ai_db.get_approved_ra_pe(carrera=carrera.upper() if carrera else None)
+    return JSONResponse(content=jsonable_encoder({"conexiones": approved, "total": len(approved)}))
 
 
 if __name__ == "__main__":

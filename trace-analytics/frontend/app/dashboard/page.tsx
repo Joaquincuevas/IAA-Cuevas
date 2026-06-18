@@ -8,19 +8,19 @@ import { getUser } from "@/lib/auth";
 
 const EXPLORE_CARDS = [
   {
-    tag: "PRINCIPAL",
-    title: "Explorador",
-    desc: "Relación Perfil de Egreso ↔ Curso ↔ Objetivo de aprendizaje. Filtra por cualquier dimensión y exporta a Excel.",
-    href: "/dashboard/explorador",
+    tag: "IA · PRINCIPAL",
+    title: "Conexiones IA",
+    desc: "Propuestas IA de conexiones entre Resultados de Aprendizaje y Perfiles de Egreso. Aprueba o rechaza cada propuesta.",
+    href: "/dashboard/conexiones",
   },
   {
-    tag: "ANÁLISIS",
+    tag: "IA · ANÁLISIS",
     title: "Redundancia",
-    desc: "Objetivos de aprendizaje semánticamente similares entre cursos, para detectar repetición sin progresión.",
+    desc: "Pares de objetivos de aprendizaje semánticamente similares detectados por IA, para identificar repetición curricular.",
     href: "/dashboard/redundancia",
   },
   {
-    tag: "IA",
+    tag: "IA · CHAT",
     title: "Taula",
     desc: "Pregunta sobre la malla en lenguaje natural — análisis, brechas y comparaciones.",
     href: "/dashboard/taula",
