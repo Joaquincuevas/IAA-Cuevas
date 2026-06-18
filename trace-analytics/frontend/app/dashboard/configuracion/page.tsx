@@ -28,29 +28,29 @@ export default function ConfiguracionPage() {
   }, []);
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[#111827]">Configuración</h1>
-        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
+    <div className="p-10 max-w-5xl">
+      <div className="mb-8">
+        <h1 className="text-[28px] font-bold text-[#111827] tracking-tight">Configuración</h1>
+        <p className="text-[14.5px] text-[#6B7280] mt-1">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-6">
         {/* Perfil */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <User size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Perfil</h2>
+        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <User size={18} className="text-[#1B2A4A]" />
+            <h2 className="text-[16px] font-bold text-[#111827]">Perfil</h2>
           </div>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[16px] font-bold">
+          <div className="flex items-center gap-4 mb-5">
+            <div className="w-14 h-14 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[20px] font-bold">
               {me?.name?.[0] ?? "?"}
             </div>
             <div>
-              <p className="text-[15px] font-bold text-[#111827]">{me?.name ?? "…"}</p>
-              <p className="text-[12px] text-[#6B7280]">{me?.email ?? ""}</p>
+              <p className="text-[18px] font-bold text-[#111827]">{me?.name ?? "…"}</p>
+              <p className="text-[13px] text-[#6B7280]">{me?.email ?? ""}</p>
             </div>
           </div>
-          <dl className="text-[12px] space-y-2">
+          <dl className="text-[13.5px] space-y-2.5">
             <Row k="Último ingreso" v={fmtDate(me?.last_login ?? null)} />
             <Row k="Conversaciones guardadas" v={String(me?.actividad?.chats ?? 0)} />
             <Row k="Filtros guardados" v={String(me?.actividad?.filtros ?? 0)} />
@@ -58,30 +58,30 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Cambiar contraseña */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Lock size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Cambiar contraseña</h2>
+        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <Lock size={18} className="text-[#1B2A4A]" />
+            <h2 className="text-[16px] font-bold text-[#111827]">Cambiar contraseña</h2>
           </div>
           <ChangePasswordForm />
         </section>
 
         {/* Últimas conversaciones */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
+        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+          <div className="flex items-center gap-2.5 mb-4">
+            <MessageSquare size={18} className="text-[#1B2A4A]" />
+            <h2 className="text-[16px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
           </div>
           {chats.length === 0 ? (
-            <p className="text-[12px] text-[#9CA3AF]">Aún no has conversado con la IA.</p>
+            <p className="text-[13.5px] text-[#9CA3AF]">Aún no has conversado con la IA.</p>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-auto">
+            <div className="space-y-2.5 max-h-72 overflow-auto">
               {chats.slice(-8).reverse().map((m, i) => (
-                <div key={i} className="text-[12px]">
+                <div key={i} className="text-[13.5px] leading-relaxed">
                   <span className={`font-semibold ${m.role === "user" ? "text-[#1B2A4A]" : "text-[#6B7280]"}`}>
                     {m.role === "user" ? "Tú" : "Taula"}:
                   </span>{" "}
-                  <span className="text-[#374151]">{m.content.slice(0, 120)}{m.content.length > 120 ? "…" : ""}</span>
+                  <span className="text-[#374151]">{m.content.slice(0, 140)}{m.content.length > 140 ? "…" : ""}</span>
                 </div>
               ))}
             </div>
@@ -89,19 +89,19 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Filtros guardados */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Filtros guardados</h2>
+        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+          <div className="flex items-center gap-2.5 mb-4">
+            <Filter size={18} className="text-[#1B2A4A]" />
+            <h2 className="text-[16px] font-bold text-[#111827]">Filtros guardados</h2>
           </div>
           {filters.length === 0 ? (
-            <p className="text-[12px] text-[#9CA3AF]">No has guardado filtros del Explorador.</p>
+            <p className="text-[13.5px] text-[#9CA3AF]">No has guardado filtros del Explorador.</p>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-auto">
+            <div className="space-y-2.5 max-h-72 overflow-auto">
               {filters.map((f, i) => (
-                <div key={i} className="text-[12px] border border-[#F3F4F6] rounded-md px-3 py-2">
+                <div key={i} className="text-[13.5px] border border-[#F3F4F6] rounded-lg px-4 py-3">
                   <p className="text-[#111827] font-medium">{f.label || "Filtro sin nombre"}</p>
-                  <p className="text-[#9CA3AF] text-[11px]">{fmtDate(f.created_at)}</p>
+                  <p className="text-[#9CA3AF] text-[12px] mt-0.5">{fmtDate(f.created_at)}</p>
                 </div>
               ))}
             </div>
@@ -114,7 +114,7 @@ export default function ConfiguracionPage() {
 
 function Row({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between border-b border-[#F3F4F6] pb-1.5">
+    <div className="flex justify-between border-b border-[#F3F4F6] pb-2">
       <dt className="text-[#6B7280]">{k}</dt>
       <dd className="text-[#111827] font-medium">{v}</dd>
     </div>
@@ -145,28 +145,28 @@ function ChangePasswordForm() {
     }
   }
 
-  const inputCls = "w-full h-9 px-3 text-[13px] border border-[#E5E7EB] rounded-md outline-none focus:border-[#1B2A4A] transition-colors";
+  const inputCls = "w-full h-10 px-3 text-[14px] border border-[#E5E7EB] rounded-lg outline-none focus:border-[#1B2A4A] transition-colors";
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="space-y-3.5">
       <div>
-        <label className="text-[11px] font-semibold text-[#6B7280] block mb-1">Contraseña actual</label>
+        <label className="text-[12.5px] font-semibold text-[#6B7280] block mb-1.5">Contraseña actual</label>
         <input type="password" value={oldp} onChange={(e) => setOld(e.target.value)} className={inputCls} required />
       </div>
       <div>
-        <label className="text-[11px] font-semibold text-[#6B7280] block mb-1">Nueva contraseña</label>
+        <label className="text-[12.5px] font-semibold text-[#6B7280] block mb-1.5">Nueva contraseña</label>
         <input type="password" value={newp} onChange={(e) => setNew(e.target.value)} className={inputCls} required />
       </div>
       <div>
-        <label className="text-[11px] font-semibold text-[#6B7280] block mb-1">Repetir nueva contraseña</label>
+        <label className="text-[12.5px] font-semibold text-[#6B7280] block mb-1.5">Repetir nueva contraseña</label>
         <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} required />
       </div>
       {status && (
-        <div className={`flex items-center gap-1.5 text-[12px] ${status.ok ? "text-[#059669]" : "text-[#DC2626]"}`}>
-          {status.ok ? <Check size={13} /> : <AlertCircle size={13} />} {status.msg}
+        <div className={`flex items-center gap-1.5 text-[13px] ${status.ok ? "text-[#059669]" : "text-[#DC2626]"}`}>
+          {status.ok ? <Check size={15} /> : <AlertCircle size={15} />} {status.msg}
         </div>
       )}
-      <button type="submit" disabled={busy} className="w-full h-9 bg-[#111827] text-white text-[13px] font-medium rounded-md hover:bg-[#1f2937] transition-colors disabled:opacity-50">
+      <button type="submit" disabled={busy} className="w-full h-10 bg-[#111827] text-white text-[14px] font-medium rounded-lg hover:bg-[#1f2937] transition-colors disabled:opacity-50">
         {busy ? "Guardando…" : "Actualizar contraseña"}
       </button>
     </form>

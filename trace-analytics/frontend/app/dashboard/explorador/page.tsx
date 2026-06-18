@@ -32,9 +32,9 @@ type Row = {
 const PAGE_SIZE = 200;
 
 const SELECT_CLS =
-  "h-9 px-2.5 text-[13px] border border-[#E5E7EB] rounded-md bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
+  "h-10 px-3 text-[14px] border border-[#E5E7EB] rounded-lg bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
 const SEARCH_CLS =
-  "w-full h-9 pl-9 pr-3 text-[13px] border border-[#E5E7EB] rounded-md bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
+  "w-full h-10 pl-10 pr-3 text-[14px] border border-[#E5E7EB] rounded-lg bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
 
 export default function ExploradorPage() {
   const [carrera, setCarrera] = useState("ICC");
@@ -139,27 +139,27 @@ export default function ExploradorPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-10">
       {/* Header */}
-      <div className="flex items-start justify-between mb-5">
+      <div className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111827]">Explorador</h1>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">
+          <h1 className="text-[28px] font-bold text-[#111827] tracking-tight">Explorador</h1>
+          <p className="text-[14.5px] text-[#6B7280] mt-1">
             Relación <span className="text-[#1B2A4A]">Perfil de Egreso ↔ Curso ↔ Objetivo de aprendizaje</span>. Filtra por cualquier columna en cualquier dirección.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2.5 flex-shrink-0">
           <button
             onClick={saveFilter}
-            className="flex items-center gap-1.5 px-3 py-2 border border-[#E5E7EB] rounded-md text-[12px] font-medium text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-[13.5px] font-medium text-[#4B5563] hover:bg-[#F9FAFB] transition-colors"
           >
-            {saved ? <><Check size={13} className="text-[#059669]" /> Guardado</> : <><Bookmark size={13} /> Guardar filtro</>}
+            {saved ? <><Check size={15} className="text-[#059669]" /> Guardado</> : <><Bookmark size={15} /> Guardar filtro</>}
           </button>
           <button
             onClick={exportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white rounded-md text-[12px] font-medium hover:bg-[#1f2937] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#111827] text-white rounded-lg text-[13.5px] font-medium hover:bg-[#1f2937] transition-colors"
           >
-            <Download size={13} /> Exportar Excel
+            <Download size={15} /> Exportar Excel
           </button>
         </div>
       </div>
@@ -186,13 +186,13 @@ export default function ExploradorPage() {
         </Field>
         <Field label="Curso">
           <div className="relative w-[180px]">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
             <input value={fCurso} onChange={(e) => setFCurso(e.target.value)} placeholder="código o nombre…" className={SEARCH_CLS} />
           </div>
         </Field>
         <Field label="Objetivo (RA)">
           <div className="relative w-[200px]">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
             <input value={fRA} onChange={(e) => setFRA(e.target.value)} placeholder="buscar texto…" className={SEARCH_CLS} />
           </div>
         </Field>
@@ -204,40 +204,40 @@ export default function ExploradorPage() {
       </div>
 
       {/* Contador */}
-      <p className="text-[12px] text-[#6B7280] mb-2">
+      <p className="text-[13.5px] text-[#6B7280] mb-3">
         {loading ? "Cargando…" : <><span className="font-semibold text-[#111827]">{filtered.length.toLocaleString()}</span> relaciones{activeFilters > 0 ? " (filtradas)" : ""} · mostrando {Math.min(limit, filtered.length)}</>}
       </p>
 
       {/* Tabla */}
-      <div className="border border-[#E5E7EB] rounded-xl overflow-hidden">
-        <table className="w-full text-[13px]" style={{ tableLayout: "fixed" }}>
+      <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden">
+        <table className="w-full text-[14px]" style={{ tableLayout: "fixed" }}>
           <thead>
             <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
-              <th className="text-left px-4 py-2.5 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "28%" }}>Perfil de Egreso</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "22%" }}>Curso</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "40%" }}>Objetivo de aprendizaje</th>
-              <th className="text-left px-4 py-2.5 text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "10%" }}>Nivel</th>
+              <th className="text-left px-5 py-3.5 text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "28%" }}>Perfil de Egreso</th>
+              <th className="text-left px-5 py-3.5 text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "22%" }}>Curso</th>
+              <th className="text-left px-5 py-3.5 text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "40%" }}>Objetivo de aprendizaje</th>
+              <th className="text-left px-5 py-3.5 text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase" style={{ width: "10%" }}>Nivel</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={4} className="text-center py-12 text-[#9CA3AF]">Cargando…</td></tr>
+              <tr><td colSpan={4} className="text-center py-14 text-[#9CA3AF] text-[14px]">Cargando…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={4} className="text-center py-12 text-[#9CA3AF]">No hay relaciones con estos filtros</td></tr>
+              <tr><td colSpan={4} className="text-center py-14 text-[#9CA3AF] text-[14px]">No hay relaciones con estos filtros</td></tr>
             ) : (
               filtered.slice(0, limit).map((r, i) => (
                 <tr key={`${r.raId}-${r.pe}-${i}`} className="border-b border-[#F3F4F6] hover:bg-[#F9FAFB] transition-colors align-top">
-                  <td className="px-4 py-2.5">
-                    <span className="font-mono text-[11px] text-[#1B2A4A] font-semibold">{r.pe}</span>
+                  <td className="px-5 py-3.5">
+                    <span className="font-mono text-[12px] text-[#1B2A4A] font-semibold">{r.pe}</span>
                     <span className="text-[#6B7280] ml-1.5">{r.peDesc}</span>
                   </td>
-                  <td className="px-4 py-2.5">
-                    <span className="font-mono text-[11px] text-[#1B2A4A]">{r.cursoId}</span>
-                    <div className="text-[12px] text-[#6B7280]">{r.cursoNombre}</div>
+                  <td className="px-5 py-3.5">
+                    <span className="font-mono text-[12px] text-[#1B2A4A]">{r.cursoId}</span>
+                    <div className="text-[13px] text-[#6B7280] mt-0.5">{r.cursoNombre}</div>
                   </td>
-                  <td className="px-4 py-2.5 text-[#111827]">{r.raTexto}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-medium text-white" style={{ backgroundColor: NIVEL_COLOR[r.nivel] ?? "#9CA3AF" }}>{r.nivel}</span>
+                  <td className="px-5 py-3.5 text-[#111827] leading-relaxed">{r.raTexto}</td>
+                  <td className="px-5 py-3.5">
+                    <span className="px-2.5 py-1 rounded-md text-[11.5px] font-medium text-white" style={{ backgroundColor: NIVEL_COLOR[r.nivel] ?? "#9CA3AF" }}>{r.nivel}</span>
                   </td>
                 </tr>
               ))
@@ -247,8 +247,8 @@ export default function ExploradorPage() {
       </div>
 
       {!loading && filtered.length > limit && (
-        <div className="flex justify-center mt-4">
-          <button onClick={() => setLimit((l) => l + PAGE_SIZE)} className="px-4 py-2 text-[12px] border border-[#E5E7EB] rounded-md text-[#6B7280] hover:bg-[#F9FAFB]">
+        <div className="flex justify-center mt-5">
+          <button onClick={() => setLimit((l) => l + PAGE_SIZE)} className="px-5 py-2.5 text-[13.5px] border border-[#E5E7EB] rounded-lg text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
             Mostrar más ({(filtered.length - limit).toLocaleString()} restantes)
           </button>
         </div>
@@ -261,7 +261,7 @@ export default function ExploradorPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-semibold text-[#6B7280]">{label}</label>
+      <label className="text-[12.5px] font-semibold text-[#6B7280]">{label}</label>
       {children}
     </div>
   );

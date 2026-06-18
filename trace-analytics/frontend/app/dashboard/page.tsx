@@ -36,94 +36,96 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="p-8">
+    <div className="p-10 max-w-[1400px]">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-10">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111827]">Inicio</h1>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">
+          <h1 className="text-[30px] font-bold text-[#111827] tracking-tight">Inicio</h1>
+          <p className="text-[15px] text-[#6B7280] mt-1">
             Bienvenido, {user?.name ?? "usuario"} — Mallas curriculares · Universidad de los Andes
           </p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-md text-[12px] text-[#6B7280] hover:bg-[#F9FAFB] transition-colors">
-            <RefreshCw size={13} /> Sincronizar
+        <div className="flex gap-2.5">
+          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-[13.5px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
+            <RefreshCw size={15} /> Sincronizar
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-md text-[12px] text-[#6B7280] hover:bg-[#F9FAFB] transition-colors">
-            <Download size={13} /> Exportar
+          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-[13.5px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
+            <Download size={15} /> Exportar
           </button>
         </div>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="CURSOS TOTALES" value={stats?.cursos ?? 139} sub="6 carreras de Ingeniería" dotColor="#6B7280" />
-        <StatCard label="OBJETIVOS DE APRENDIZAJE" value={stats?.objetivos ?? 672} sub="Resultados de aprendizaje (RA)" dotColor="#6B7280" />
-        <StatCard label="LINKS ENTRE RA" value={stats?.links ?? 924} sub="Relaciones de prerrequisito" dotColor="#6B7280" />
-        <StatCard label="CARRERAS" value={stats?.carreras ?? 6} sub="Facultad de Ingeniería" dotColor="#6B7280" />
+      <div className="grid grid-cols-4 gap-5 mb-12">
+        <StatCard label="CURSOS TOTALES" value={stats?.cursos ?? 139} sub="6 carreras de Ingeniería" />
+        <StatCard label="OBJETIVOS DE APRENDIZAJE" value={stats?.objetivos ?? 672} sub="Resultados de aprendizaje (RA)" />
+        <StatCard label="LINKS ENTRE RA" value={stats?.links ?? 924} sub="Relaciones de prerrequisito" />
+        <StatCard label="CARRERAS" value={stats?.carreras ?? 6} sub="Facultad de Ingeniería" />
       </div>
 
       {/* Explorar */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">Explorar</p>
-          <p className="text-[11px] text-[#9CA3AF]">3 módulos</p>
+      <div className="mb-12">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[12px] font-semibold tracking-widest text-[#6B7280] uppercase">Explorar</p>
+          <p className="text-[12px] text-[#9CA3AF]">3 módulos</p>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-5">
           {EXPLORE_CARDS.map((c) => (
-            <div key={c.href} className="border border-[#E5E7EB] rounded-xl p-5 hover:border-[#1B2A4A]/30 transition-colors">
-              <p className="text-[10px] font-semibold tracking-widest text-[#9CA3AF] uppercase mb-2">{c.tag}</p>
-              <h3 className="text-[14px] font-bold text-[#111827] mb-2">{c.title}</h3>
-              <p className="text-[12px] text-[#6B7280] leading-relaxed mb-4">{c.desc}</p>
-              <Link href={c.href} className="text-[12px] text-[#1B2A4A] font-medium hover:underline flex items-center gap-1">
-                Explorar <ArrowRight size={12} />
-              </Link>
-            </div>
+            <Link
+              key={c.href}
+              href={c.href}
+              className="border border-[#E5E7EB] rounded-2xl p-6 hover:border-[#1B2A4A]/40 hover:shadow-sm transition-all block"
+            >
+              <p className="text-[11px] font-semibold tracking-widest text-[#9CA3AF] uppercase mb-2.5">{c.tag}</p>
+              <h3 className="text-[18px] font-bold text-[#111827] mb-2.5">{c.title}</h3>
+              <p className="text-[14px] text-[#6B7280] leading-relaxed mb-5">{c.desc}</p>
+              <span className="text-[13.5px] text-[#1B2A4A] font-semibold hover:underline flex items-center gap-1.5">
+                Explorar <ArrowRight size={15} />
+              </span>
+            </Link>
           ))}
         </div>
       </div>
 
       {/* Taula */}
-      <div className="mb-8">
-        <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-3">Taula</p>
-        <div className="border border-[#E5E7EB] rounded-xl p-5 flex items-center justify-between">
+      <div className="mb-10">
+        <p className="text-[12px] font-semibold tracking-widest text-[#6B7280] uppercase mb-4">Taula</p>
+        <div className="border border-[#E5E7EB] rounded-2xl p-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB] flex items-center justify-center">
-              <Sparkles size={18} className="text-[#1B2A4A]" />
+            <div className="w-12 h-12 rounded-xl bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
+              <Sparkles size={22} className="text-[#1B2A4A]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[14px] font-bold text-[#111827]">✦ Taula</span>
-                <span className="text-[10px] font-medium text-[#10B981] bg-[#ECFDF5] border border-[#10B981]/20 px-2 py-0.5 rounded-full">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[17px] font-bold text-[#111827]">Taula</span>
+                <span className="text-[11.5px] font-medium text-[#059669] bg-[#ECFDF5] border border-[#10B981]/20 px-2.5 py-0.5 rounded-full">
                   Disponible
                 </span>
               </div>
-              <p className="text-[12px] text-[#6B7280] mt-0.5">
+              <p className="text-[14px] text-[#6B7280] mt-1">
                 Pregunta sobre la malla en lenguaje natural — análisis, brechas, comparaciones.
               </p>
             </div>
           </div>
           <Link
             href="/dashboard/taula"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#111827] text-white text-[13px] font-medium rounded-lg hover:bg-[#1f2937] transition-colors"
+            className="flex items-center gap-2 px-5 py-3 bg-[#111827] text-white text-[14px] font-medium rounded-xl hover:bg-[#1f2937] transition-colors flex-shrink-0"
           >
-            Abrir Taula <ArrowRight size={13} />
+            Abrir Taula <ArrowRight size={16} />
           </Link>
         </div>
       </div>
-
-      {/* Actividad reciente removida */}
     </div>
   );
 }
 
-function StatCard({ label, value, sub, dotColor }: { label: string; value: number; sub: string; dotColor: string }) {
+function StatCard({ label, value, sub }: { label: string; value: number; sub: string }) {
   return (
-    <div className="border border-[#E5E7EB] rounded-xl p-5">
-      <p className="text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2">{label}</p>
-      <p className="text-[32px] font-bold text-[#111827] leading-none mb-2">{value.toLocaleString()}</p>
-      <p className="text-[11px] text-[#6B7280] flex items-center gap-1">
-        <span style={{ color: dotColor }}>●</span> {sub}
+    <div className="border border-[#E5E7EB] rounded-2xl p-6">
+      <p className="text-[11.5px] font-semibold tracking-widest text-[#6B7280] uppercase mb-3">{label}</p>
+      <p className="text-[40px] font-bold text-[#111827] leading-none mb-3 tracking-tight">{value.toLocaleString()}</p>
+      <p className="text-[13px] text-[#6B7280] flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] inline-block" /> {sub}
       </p>
     </div>
   );
