@@ -75,14 +75,13 @@ export default function RedundanciaPage() {
     if (!voting) return;
     setSubmitting(true);
     try {
-      await castAIVote("redundancy", voting.id, voting.voto, comentario || undefined);
+      const { proposal } = await castAIVote("redundancy", voting.id, voting.voto, comentario || undefined);
       setProposals((prev) =>
-        prev.map((p) =>
-          p.id === voting.id
-            ? { ...p, status: voting.voto === "approve" ? "approved" : "rejected" }
-            : p
-        )
+        prev.map((p) => (p.id === voting.id ? { ...p, ...proposal } : p))
       );
+      getAIStats(carrera).then(setStats).catch(() => {});
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "No se pudo guardar el voto.");
     } finally {
       setSubmitting(false);
       setVoting(null);

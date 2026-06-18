@@ -819,6 +819,21 @@ def get_ai_stats_endpoint(carrera: Optional[str] = None, email: str = Depends(ve
     return ai_db.get_ai_stats(carrera=carrera.upper() if carrera else None)
 
 
+@app.post("/api/ai/clear-all")
+def clear_all_ai(email: str = Depends(verify_token)):
+    """Elimina todas las propuestas IA, votos e historial de jobs (no toca Excel ni usuarios)."""
+    if ai_db.get_running_jobs():
+        raise HTTPException(
+            status_code=409,
+            detail="Hay un análisis en curso. Cancélalo antes de eliminar los resultados.",
+        )
+    deleted = ai_db.clear_all_ai_results()
+    return {
+        "message": "Resultados IA eliminados",
+        "deleted": deleted,
+    }
+
+
 @app.get("/api/ai/export/conexiones")
 def export_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_token)):
     """Devuelve propuestas aprobadas para exportar."""

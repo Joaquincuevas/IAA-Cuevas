@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { User, Lock, MessageSquare, Filter, Check, AlertCircle, RefreshCw, Cpu } from "lucide-react";
+import { User, Lock, MessageSquare, Filter, Check, AlertCircle, RefreshCw, Cpu, Trash2, X } from "lucide-react";
 import {
   getMe,
   changePassword,
@@ -11,6 +11,7 @@ import {
   getAICurrentJob,
   getAIJobStatus,
   cancelAIJob,
+  clearAllAIResults,
   getAILatestJobs,
   getAIStats,
   type AIJob,
@@ -179,6 +180,8 @@ function AIAnalysisSection() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed,  setElapsed]  = useState(0);
   const [cancelling, setCancelling] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeJobIdRef = useRef<number | null>(null);
@@ -320,6 +323,29 @@ function AIAnalysisSection() {
       setMsg(e instanceof Error ? e.message : "No se pudo cancelar el análisis.");
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function handleClearAll() {
+    setClearing(true);
+    try {
+      const r = await clearAllAIResults();
+      stopPolling();
+      setPhase("idle");
+      setJob(null);
+      setStartedAt(null);
+      setElapsed(0);
+      activeJobIdRef.current = null;
+      setLatest({ conexiones: null, redundancia: null, running: [] });
+      setStats({ ra_pe: { total: 0, pending: 0, approved: 0, rejected: 0 }, redundancia: { total: 0, pending: 0 } });
+      setMsg(
+        `Eliminados: ${r.deleted.conexiones} conexiones, ${r.deleted.redundancia} redundancias, ${r.deleted.votes} votos.`
+      );
+      setShowClearConfirm(false);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "No se pudieron eliminar los resultados.");
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -495,6 +521,66 @@ function AIAnalysisSection() {
           <p>Aún no se ha ejecutado ningún análisis IA. Haz clic en Recalcular para iniciar.</p>
         )}
       </div>
+
+      <div className="mt-5 pt-4 border-t border-[#E5E7EB]">
+        <p className="text-[11px] text-[#6B7280] mb-2">
+          Borra solo los resultados generados por IA (conexiones, redundancias y votos). Los Excel con RAs, PEs y matrices no se modifican.
+        </p>
+        <button
+          type="button"
+          disabled={isBusy || clearing || (stats?.ra_pe.total === 0 && stats?.redundancia.total === 0)}
+          onClick={() => setShowClearConfirm(true)}
+          className="flex items-center gap-1.5 px-4 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-md hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+        >
+          <Trash2 size={13} />
+          Eliminar todos los resultados IA
+        </button>
+      </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[440px]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[15px] font-bold text-[#111827]">Eliminar resultados IA</h3>
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="text-[#9CA3AF] hover:text-[#374151]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[13px] text-[#374151] mb-2">
+              Se eliminarán permanentemente:
+            </p>
+            <ul className="text-[12px] text-[#6B7280] list-disc pl-5 mb-4 space-y-1">
+              <li>{stats?.ra_pe.total ?? 0} propuestas de conexiones RA→PE</li>
+              <li>{stats?.redundancia.total ?? 0} pares de redundancia</li>
+              <li>Todos los votos y el historial de jobs IA</li>
+            </ul>
+            <p className="text-[12px] text-[#9CA3AF] mb-5">
+              No se borran los objetivos, PEs ni matrices del currículo (Excel).
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-[12px] border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:bg-[#F9FAFB]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={clearing}
+                onClick={handleClearAll}
+                className="px-4 py-2 text-[12px] rounded-lg text-white font-medium bg-[#DC2626] hover:bg-[#B91C1C] disabled:opacity-50"
+              >
+                {clearing ? "Eliminando…" : "Sí, eliminar todo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

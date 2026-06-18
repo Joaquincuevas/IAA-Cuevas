@@ -10,8 +10,8 @@ Tablas (todas en app.db, el mismo SQLite que auth_db):
 La BD se inicializa llamando a init_ai_tables() desde main.py lifespan,
 igual que auth_db.init_db().
 
-Umbral de aprobación automática: si ≥ APPROVE_THRESHOLD usuarios votan
-'approve' la propuesta queda en 'approved'; análogo para 'rejected'.
+Umbral de votos: con APPROVE_THRESHOLD=1 un solo voto 'approve' aprueba la propuesta
+(análogo para 'reject'). Los votos quedan registrados en ai_votes para auditoría.
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from typing import Any
 
 DB_PATH = Path(os.environ.get("APP_DB", str(Path(__file__).parent / "app.db")))
 
-APPROVE_THRESHOLD = 2
-REJECT_THRESHOLD = 2
+APPROVE_THRESHOLD = 1
+REJECT_THRESHOLD = 1
 
 
 class JobCancelled(Exception):
@@ -118,6 +118,59 @@ def init_ai_tables() -> None:
         conn.commit()
     except sqlite3.OperationalError:
         pass
+    reconcile_vote_statuses()
+    conn.close()
+
+
+def _status_from_vote_tally(
+    conn: sqlite3.Connection,
+    target_type: str,
+    target_id: int,
+    tally: dict[str, int],
+) -> str | None:
+    approves = tally.get("approve", 0)
+    rejects = tally.get("reject", 0)
+    if approves >= APPROVE_THRESHOLD and approves > rejects:
+        return "approved"
+    if rejects >= REJECT_THRESHOLD and rejects > approves:
+        return "rejected"
+    if approves >= APPROVE_THRESHOLD and rejects >= REJECT_THRESHOLD:
+        last = conn.execute(
+            """SELECT voto FROM ai_votes
+               WHERE target_type=? AND target_id=?
+               ORDER BY created_at DESC LIMIT 1""",
+            (target_type, target_id),
+        ).fetchone()
+        if last:
+            return "approved" if last["voto"] == "approve" else "rejected"
+    if approves >= APPROVE_THRESHOLD:
+        return "approved"
+    if rejects >= REJECT_THRESHOLD:
+        return "rejected"
+    return None
+
+
+def reconcile_vote_statuses() -> None:
+    """Aplica votos ya guardados al status de propuestas (p. ej. tras cambiar umbral)."""
+    conn = _conn()
+    for target_type, table in (
+        ("ra_pe", "ai_ra_pe_proposals"),
+        ("redundancy", "ai_redundancy_proposals"),
+    ):
+        ids = conn.execute(f"SELECT id FROM {table}").fetchall()
+        for row in ids:
+            tid = row["id"]
+            counts = conn.execute(
+                "SELECT voto, COUNT(*) as n FROM ai_votes WHERE target_type=? AND target_id=? GROUP BY voto",
+                (target_type, tid),
+            ).fetchall()
+            if not counts:
+                continue
+            tally = {r["voto"]: r["n"] for r in counts}
+            new_status = _status_from_vote_tally(conn, target_type, tid, tally)
+            if new_status:
+                conn.execute(f"UPDATE {table} SET status=? WHERE id=?", (new_status, tid))
+    conn.commit()
     conn.close()
 
 
@@ -492,15 +545,7 @@ def cast_vote(email: str, target_type: str, target_id: int, voto: str, comentari
         (target_type, target_id),
     ).fetchall()
     tally = {r["voto"]: r["n"] for r in counts}
-    approves = tally.get("approve", 0)
-    rejects = tally.get("reject", 0)
-
-    # Update proposal status
-    new_status: str | None = None
-    if approves >= APPROVE_THRESHOLD:
-        new_status = "approved"
-    elif rejects >= REJECT_THRESHOLD:
-        new_status = "rejected"
+    new_status = _status_from_vote_tally(conn, target_type, target_id, tally)
 
     table = "ai_ra_pe_proposals" if target_type == "ra_pe" else "ai_redundancy_proposals"
     if new_status:
@@ -575,3 +620,27 @@ def get_ai_stats(carrera: str | None = None) -> dict:
 # ── Export ────────────────────────────────────────────────────────────────────
 def get_approved_ra_pe(carrera: str | None = None) -> list[dict]:
     return get_ra_pe_proposals(carrera=carrera, status="approved", limit=10000)
+
+
+def clear_all_ai_results() -> dict[str, int]:
+    """
+    Elimina propuestas IA, votos e historial de jobs.
+    No toca datos curriculares (Excel) ni usuarios/auth.
+    """
+    conn = _conn()
+    n_votes = conn.execute("SELECT COUNT(*) FROM ai_votes").fetchone()[0]
+    n_conex = conn.execute("SELECT COUNT(*) FROM ai_ra_pe_proposals").fetchone()[0]
+    n_red = conn.execute("SELECT COUNT(*) FROM ai_redundancy_proposals").fetchone()[0]
+    n_jobs = conn.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0]
+    conn.execute("DELETE FROM ai_votes")
+    conn.execute("DELETE FROM ai_ra_pe_proposals")
+    conn.execute("DELETE FROM ai_redundancy_proposals")
+    conn.execute("DELETE FROM ai_jobs")
+    conn.commit()
+    conn.close()
+    return {
+        "votes": n_votes,
+        "conexiones": n_conex,
+        "redundancia": n_red,
+        "jobs": n_jobs,
+    }

@@ -230,6 +230,13 @@ export async function cancelAIJob() {
   return apiFetch<{ message: string; job: AIJob }>("/api/ai/cancel", { method: "POST" });
 }
 
+export async function clearAllAIResults() {
+  return apiFetch<{
+    message: string;
+    deleted: { votes: number; conexiones: number; redundancia: number; jobs: number };
+  }>("/api/ai/clear-all", { method: "POST" });
+}
+
 export async function getAILatestJobs() {
   return apiFetch<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] }>(
     "/api/ai/jobs/latest"
