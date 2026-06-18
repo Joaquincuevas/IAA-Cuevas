@@ -33,6 +33,39 @@ export async function getStats() {
   return apiFetch<{ cursos: number; objetivos: number; links: number; carreras: number }>("/api/stats");
 }
 
+export async function getMe() {
+  return apiFetch<{
+    email: string; name: string; role: string; last_login: string | null;
+    actividad: { chats: number; filtros: number };
+  }>("/api/me");
+}
+
+export async function changePassword(oldPassword: string, newPassword: string) {
+  return apiFetch<{ message: string }>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+}
+
+export async function getChatHistory() {
+  return apiFetch<{ messages: { role: string; content: string; created_at: string }[] }>(
+    "/api/history/chat"
+  );
+}
+
+export async function saveFilterSnapshot(label: string, filters: Record<string, unknown>) {
+  return apiFetch<{ message: string }>("/api/history/filters", {
+    method: "POST",
+    body: JSON.stringify({ label, filters }),
+  });
+}
+
+export async function getFilterHistory() {
+  return apiFetch<{ snapshots: { label: string; filters: Record<string, unknown>; created_at: string }[] }>(
+    "/api/history/filters"
+  );
+}
+
 export async function getConexiones(carrera?: string) {
   const q = carrera ? `?carrera=${carrera}` : "";
   return apiFetch<{

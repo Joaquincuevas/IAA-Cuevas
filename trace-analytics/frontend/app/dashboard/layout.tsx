@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, Table2, GitBranch, Sparkles, Plus } from "lucide-react";
+import { Home, Table2, GitBranch, Sparkles, Plus, Settings } from "lucide-react";
 import { isAuthenticated, getUser, clearAuth } from "@/lib/auth";
 
 const NAV = [
@@ -69,14 +69,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        <div className="border-t border-[#E5E7EB] pt-3 px-2 mt-3">
-          <p className="text-[10px] text-[#9CA3AF] truncate mb-1">{user.email}</p>
-          <button
-            onClick={handleLogout}
-            className="text-[11px] text-red-500 hover:text-red-600 font-medium transition-colors"
+        <div className="border-t border-[#E5E7EB] pt-2 mt-3">
+          <Link
+            href="/dashboard/configuracion"
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] transition-colors mb-2 ${
+              pathname.startsWith("/dashboard/configuracion")
+                ? "font-bold text-[#111827] border-l-2 border-[#1B2A4A] pl-[6px]"
+                : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB]"
+            }`}
           >
-            Cerrar sesión
-          </button>
+            <Settings size={13} /> Configuración
+          </Link>
+          <div className="px-2">
+            <p className="text-[10px] text-[#9CA3AF] truncate mb-1">{user.email}</p>
+            <button
+              onClick={handleLogout}
+              className="text-[11px] text-red-500 hover:text-red-600 font-medium transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </aside>
 

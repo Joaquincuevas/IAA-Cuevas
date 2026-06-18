@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 .env
+
+# Datos de runtime (usuarios, hashes, historial)
+backend/app.db
+backend/.env

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Search, X } from "lucide-react";
-import { getTrazabilidad, type RAMapping } from "@/lib/api";
+import { Download, Search, X, Bookmark, Check } from "lucide-react";
+import { getTrazabilidad, saveFilterSnapshot, type RAMapping } from "@/lib/api";
 
 const CARRERAS = [
   { code: "ICC", label: "Computación" },
@@ -103,6 +103,20 @@ export default function ExploradorPage() {
     setFPE("Todos"); setFCurso(""); setFRA(""); setFNivel("Todos");
   }
 
+  const [saved, setSaved] = useState(false);
+  async function saveFilter() {
+    const carreraLabel = CARRERAS.find((c) => c.code === carrera)?.label ?? carrera;
+    const parts = [carreraLabel, fPE !== "Todos" ? fPE : null, fNivel !== "Todos" ? fNivel : null, fCurso || null, fRA || null].filter(Boolean);
+    const label = parts.join(" · ");
+    try {
+      await saveFilterSnapshot(label, { carrera, pe: fPE, nivel: fNivel, curso: fCurso, ra: fRA });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   function exportCSV() {
     const headers = ["Perfil de Egreso", "Descripción PE", "Curso (código)", "Curso", "Objetivo (RA)", "Texto RA", "Nivel", "Carrera"];
     const esc = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
@@ -129,12 +143,20 @@ export default function ExploradorPage() {
             Relación <span className="text-[#1B2A4A]">Perfil de Egreso ↔ Curso ↔ Objetivo de aprendizaje</span>. Filtra por cualquier columna en cualquier dirección.
           </p>
         </div>
-        <button
-          onClick={exportCSV}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white rounded-md text-[12px] font-medium hover:bg-[#1f2937] transition-colors"
-        >
-          <Download size={13} /> Exportar Excel
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={saveFilter}
+            className="flex items-center gap-1.5 px-3 py-2 border border-[#E5E7EB] rounded-md text-[12px] font-medium text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
+          >
+            {saved ? <><Check size={13} className="text-[#059669]" /> Guardado</> : <><Bookmark size={13} /> Guardar filtro</>}
+          </button>
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#111827] text-white rounded-md text-[12px] font-medium hover:bg-[#1f2937] transition-colors"
+          >
+            <Download size={13} /> Exportar Excel
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}

@@ -15,22 +15,20 @@ import os
 from collections import defaultdict
 from dotenv import load_dotenv
 from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre, generar_resumen_tributacion
+import auth_db
 
 load_dotenv(Path(__file__).parent / ".env")
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-SECRET_KEY = "trace-analytics-secret-2026"
+# La clave de firma de JWT se toma del entorno; el valor por defecto es solo para
+# desarrollo local. En producción definir SECRET_KEY como variable de entorno.
+SECRET_KEY = os.environ.get("SECRET_KEY", "trace-analytics-dev-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
 DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / "data" / "RA_UandesFunctional.xlsx")))
 # Folder containing the Excel files (matrices + RA_Uandes)
 DATA_FOLDER = DATA_PATH.parent
-
-USERS = {
-    "jjcuevas@miuandes.cl": {"password": "admin123", "name": "Joaquín", "role": "admin"},
-    "vcuevas@miuandes.cl":  {"password": "admin123", "name": "Vicente", "role": "admin"},
-}
 
 CARRERA_NAMES = {
     "IOC": "Civil",
@@ -53,6 +51,7 @@ def get_matrices() -> dict:
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     global _matrices_cache
+    auth_db.init_db()
     try:
         df_cursos, df_tributacion, df_competencias = parse_todas_las_matrices(DATA_FOLDER)
         _matrices_cache = {
@@ -148,13 +147,58 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
 
 @app.post("/api/auth/login")
 def login(req: LoginRequest):
-    user = USERS.get(req.email.strip())
-    if not user or user["password"] != req.password:
+    user = auth_db.verify_login(req.email, req.password)
+    if not user:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     return {
-        "token": create_token(req.email.strip()),
-        "user": {"email": req.email.strip(), "name": user["name"], "role": user["role"]},
+        "token": create_token(user["email"]),
+        "user": auth_db.public_user(user),
     }
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+def change_password(req: ChangePasswordRequest, email: str = Depends(verify_token)):
+    ok, message = auth_db.change_password(email, req.old_password, req.new_password)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"message": message}
+
+
+@app.get("/api/me")
+def get_me(email: str = Depends(verify_token)):
+    user = auth_db.get_user(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {
+        **auth_db.public_user(user),
+        "actividad": auth_db.activity_summary(email),
+    }
+
+
+@app.get("/api/history/chat")
+def get_chat_history(email: str = Depends(verify_token)):
+    return {"messages": auth_db.recent_chats(email)}
+
+
+class FilterSnapshotRequest(BaseModel):
+    label: str = ""
+    filters: dict = {}
+
+
+@app.post("/api/history/filters")
+def save_filter_snapshot(req: FilterSnapshotRequest, email: str = Depends(verify_token)):
+    auth_db.add_filter_snapshot(email, req.label, req.filters)
+    return {"message": "Filtro guardado"}
+
+
+@app.get("/api/history/filters")
+def get_filter_history(email: str = Depends(verify_token)):
+    return {"snapshots": auth_db.recent_filters(email)}
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 @app.get("/api/stats")
@@ -756,7 +800,14 @@ def chat(req: ChatRequest, email: str = Depends(verify_token)):
             temperature=0.3,
             max_tokens=1024,
         )
-        return {"reply": completion.choices[0].message.content}
+        reply = completion.choices[0].message.content
+        # Persistir la conversación por usuario (historial)
+        try:
+            auth_db.add_chat(email, "user", req.message)
+            auth_db.add_chat(email, "assistant", reply or "")
+        except Exception:
+            pass
+        return {"reply": reply}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
