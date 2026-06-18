@@ -127,26 +127,26 @@ export default function ConexionesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-9">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-7 gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111827]">Conexiones RA → PE</h1>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">
+          <h1 className="text-[26px] font-bold text-[#111827] tracking-tight">Conexiones RA → PE</h1>
+          <p className="text-[14px] text-[#6B7280] mt-1">
             Propuestas generadas por IA que conectan Resultados de Aprendizaje con Perfiles de Egreso.
             Aprueba o rechaza cada propuesta.
           </p>
         </div>
         <button
           onClick={handleExport}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-md text-[12px] text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
+          className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors flex-shrink-0"
         >
-          <Download size={13} /> Exportar aprobadas
+          <Download size={14} /> Exportar aprobadas
         </button>
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-5 mb-7">
         <KpiCard label="TOTAL PROPUESTAS"  value={stats?.ra_pe.total ?? 0}    dot="#6B7280" />
         <KpiCard label="PENDIENTES"        value={stats?.ra_pe.pending ?? 0}  dot="#F59E0B" />
         <KpiCard label="APROBADAS"         value={stats?.ra_pe.approved ?? 0} dot="#10B981" />
@@ -161,7 +161,7 @@ export default function ConexionesPage() {
             <button
               key={c.code}
               onClick={() => setCarrera(c.code)}
-              className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
+              className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
                 carrera === c.code
                   ? "bg-[#1B2A4A] text-white"
                   : "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
@@ -176,7 +176,7 @@ export default function ConexionesPage() {
         <select
           value={fStatus}
           onChange={(e) => setFStatus(e.target.value)}
-          className="text-[12px] border border-[#E5E7EB] rounded-md px-2 py-1 text-[#374151]"
+          className="text-[13px] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#374151]"
         >
           <option>Todos</option>
           <option value="pending">Pendientes</option>
@@ -204,8 +204,8 @@ export default function ConexionesPage() {
           </p>
         </div>
       ) : (
-        <div className="border border-[#E5E7EB] rounded-xl overflow-auto">
-          <table className="w-full text-[12px]">
+        <div className="border border-[#E5E7EB] rounded-2xl overflow-auto">
+          <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">PE</th>
@@ -367,11 +367,11 @@ export default function ConexionesPage() {
 
 function KpiCard({ label, value, dot }: { label: string; value: number; dot: string }) {
   return (
-    <div className="border border-[#E5E7EB] rounded-xl p-5">
-      <p className="text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2">{label}</p>
-      <p className="text-[32px] font-bold text-[#111827] leading-none mb-2">{value.toLocaleString()}</p>
-      <p className="text-[11px] text-[#9CA3AF] flex items-center gap-1">
-        <span style={{ color: dot }}>●</span> propuestas IA
+    <div className="border border-[#E5E7EB] rounded-2xl p-6">
+      <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2.5">{label}</p>
+      <p className="text-[34px] font-bold text-[#111827] leading-none mb-2.5 tracking-tight">{value.toLocaleString()}</p>
+      <p className="text-[12px] text-[#9CA3AF] flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: dot }} /> propuestas IA
       </p>
     </div>
   );
@@ -384,16 +384,16 @@ function FilterInput({
 }) {
   return (
     <div className={`relative flex items-center ${wide ? "flex-1 min-w-[200px]" : ""}`}>
-      <Search size={11} className="absolute left-2 text-[#9CA3AF]" />
+      <Search size={13} className="absolute left-2.5 text-[#9CA3AF] pointer-events-none" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="pl-6 pr-6 py-1 text-[12px] border border-[#E5E7EB] rounded-md w-full focus:outline-none focus:border-[#1B2A4A]"
+        className="pl-8 pr-7 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg w-full focus:outline-none focus:border-[#1B2A4A]"
       />
       {value && (
-        <button onClick={() => onChange("")} className="absolute right-2 text-[#9CA3AF] hover:text-[#374151]">
-          <X size={11} />
+        <button onClick={() => onChange("")} className="absolute right-2.5 text-[#9CA3AF] hover:text-[#374151]">
+          <X size={12} />
         </button>
       )}
     </div>
