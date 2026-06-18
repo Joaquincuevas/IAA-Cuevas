@@ -97,12 +97,13 @@ export default function ConexionesPage() {
     if (!voting) return;
     setSubmitting(true);
     try {
-      await castAIVote("ra_pe", voting.id, voting.voto, comentario || undefined);
+      const { proposal } = await castAIVote("ra_pe", voting.id, voting.voto, comentario || undefined);
       setProposals((prev) =>
-        prev.map((p) =>
-          p.id === voting.id ? { ...p, status: voting.voto === "approve" ? "approved" : "rejected" } : p
-        )
+        prev.map((p) => (p.id === voting.id ? { ...p, ...proposal } : p))
       );
+      getAIStats(carrera).then(setStats).catch(() => {});
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "No se pudo guardar el voto.");
     } finally {
       setSubmitting(false);
       setVoting(null);
@@ -127,12 +128,12 @@ export default function ConexionesPage() {
   }
 
   return (
-    <div className="p-9">
+    <div className="p-7">
       {/* Header */}
-      <div className="flex items-start justify-between mb-7 gap-4">
+      <div className="flex items-start justify-between mb-5 gap-4">
         <div>
-          <h1 className="text-[26px] font-bold text-[#111827] tracking-tight">Conexiones RA → PE</h1>
-          <p className="text-[14px] text-[#6B7280] mt-1">
+          <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Conexiones RA → PE</h1>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">
             Propuestas generadas por IA que conectan Resultados de Aprendizaje con Perfiles de Egreso.
             Aprueba o rechaza cada propuesta.
           </p>
@@ -146,7 +147,7 @@ export default function ConexionesPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-5 mb-7">
+      <div className="grid grid-cols-4 gap-4 mb-5">
         <KpiCard label="TOTAL PROPUESTAS"  value={stats?.ra_pe.total ?? 0}    dot="#6B7280" />
         <KpiCard label="PENDIENTES"        value={stats?.ra_pe.pending ?? 0}  dot="#F59E0B" />
         <KpiCard label="APROBADAS"         value={stats?.ra_pe.approved ?? 0} dot="#10B981" />
@@ -204,16 +205,21 @@ export default function ConexionesPage() {
           </p>
         </div>
       ) : (
-        <div className="border border-[#E5E7EB] rounded-2xl overflow-auto">
+        <div className="border border-[#E5E7EB] rounded-xl overflow-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">PE</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[22%]">Descripción PE</th>
+                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[28%]">Descripción PE</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Curso</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">RA</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[24%]">Objetivo</th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Conf.</th>
+                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[28%]">Objetivo (RA)</th>
+                <th
+                  className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold whitespace-nowrap"
+                  title="Qué tan clara es la conexión RA→PE según la IA (solo se guardan ≥50%). ≥80% directa; 50–79% razonable."
+                >
+                  Confianza
+                </th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[16%]">Razón IA</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Estado</th>
                 <th className="px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Votar</th>
@@ -225,16 +231,24 @@ export default function ConexionesPage() {
                   key={p.id}
                   className={`border-b border-[#F3F4F6] ${i % 2 === 0 ? "" : "bg-[#FAFAFA]"} hover:bg-[#F0F4FF] transition-colors`}
                 >
-                  <td className="px-3 py-2 font-semibold text-[#1B2A4A]">{p.pe_id}</td>
-                  <td className="px-3 py-2 text-[#374151] leading-snug">{p.pe_texto.slice(0, 80)}{p.pe_texto.length > 80 ? "…" : ""}</td>
-                  <td className="px-3 py-2 text-[#374151]">
+                  <td className="px-3 py-2 font-semibold text-[#1B2A4A] align-top">{p.pe_id}</td>
+                  <td className="px-3 py-2 text-[#374151] leading-relaxed align-top whitespace-normal">{p.pe_texto}</td>
+                  <td className="px-3 py-2 text-[#374151] align-top">
                     <div className="font-medium">{p.curso_id}</div>
-                    <div className="text-[11px] text-[#9CA3AF]">{p.curso_nombre.slice(0, 28)}</div>
+                    <div className="text-[11px] text-[#9CA3AF] leading-snug mt-0.5">{p.curso_nombre}</div>
                   </td>
-                  <td className="px-3 py-2 text-[#6B7280] font-mono text-[11px]">{p.ra_id}</td>
-                  <td className="px-3 py-2 text-[#374151] leading-snug">{p.ra_texto.slice(0, 100)}{p.ra_texto.length > 100 ? "…" : ""}</td>
-                  <td className="px-3 py-2">
-                    <span style={{ color: CONF_COLOR(p.confianza) }} className="font-semibold">
+                  <td className="px-3 py-2 text-[#6B7280] font-mono text-[11px] align-top">{p.ra_id}</td>
+                  <td className="px-3 py-2 text-[#374151] leading-relaxed align-top whitespace-normal">{p.ra_texto}</td>
+                  <td className="px-3 py-2 align-top">
+                    <span
+                      style={{ color: CONF_COLOR(p.confianza) }}
+                      className="font-semibold"
+                      title={
+                        p.confianza >= 0.8
+                          ? "Conexión directa y explícita"
+                          : "Conexión razonable pero indirecta"
+                      }
+                    >
                       {(p.confianza * 100).toFixed(0)}%
                     </span>
                   </td>
@@ -354,9 +368,9 @@ export default function ConexionesPage() {
 
 function KpiCard({ label, value, dot }: { label: string; value: number; dot: string }) {
   return (
-    <div className="border border-[#E5E7EB] rounded-2xl p-6">
-      <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2.5">{label}</p>
-      <p className="text-[34px] font-bold text-[#111827] leading-none mb-2.5 tracking-tight">{value.toLocaleString()}</p>
+    <div className="border border-[#E5E7EB] rounded-xl p-5">
+      <p className="text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2">{label}</p>
+      <p className="text-[28px] font-bold text-[#111827] leading-none mb-2 tracking-tight">{value.toLocaleString()}</p>
       <p className="text-[12px] text-[#9CA3AF] flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: dot }} /> propuestas IA
       </p>

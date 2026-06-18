@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { User, Lock, MessageSquare, Filter, Check, AlertCircle, RefreshCw, Cpu } from "lucide-react";
+import { User, Lock, MessageSquare, Filter, Check, AlertCircle, RefreshCw, Cpu, Trash2, X } from "lucide-react";
 import {
   getMe,
   changePassword,
   getChatHistory,
   getFilterHistory,
   recomputeAI,
+  getAICurrentJob,
   getAIJobStatus,
+  cancelAIJob,
+  clearAllAIResults,
   getAILatestJobs,
   getAIStats,
   type AIJob,
@@ -39,24 +42,24 @@ export default function ConfiguracionPage() {
   }, []);
 
   return (
-    <div className="p-9 max-w-5xl">
-      <div className="mb-7">
-        <h1 className="text-[26px] font-bold text-[#111827] tracking-tight">Configuración</h1>
-        <p className="text-[14px] text-[#6B7280] mt-1">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
+    <div className="p-7 max-w-5xl">
+      <div className="mb-5">
+        <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Configuración</h1>
+        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
       </div>
 
       {/* Análisis IA — full width */}
       <AIAnalysisSection />
 
-      <div className="grid grid-cols-2 gap-5 mt-5">
+      <div className="grid grid-cols-2 gap-4 mt-5">
         {/* Perfil */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <User size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Perfil</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Perfil</h2>
           </div>
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[16px] font-bold">
+            <div className="w-11 h-11 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[15px] font-bold">
               {me?.name?.[0] ?? "?"}
             </div>
             <div>
@@ -72,19 +75,19 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Cambiar contraseña */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Lock size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Cambiar contraseña</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Cambiar contraseña</h2>
           </div>
           <ChangePasswordForm />
         </section>
 
         {/* Últimas conversaciones */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
           </div>
           {chats.length === 0 ? (
             <p className="text-[12px] text-[#9CA3AF]">Aún no has conversado con la IA.</p>
@@ -103,10 +106,10 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Filtros guardados */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <Filter size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Filtros guardados</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Filtros guardados</h2>
           </div>
           {filters.length === 0 ? (
             <p className="text-[12px] text-[#9CA3AF]">No has guardado filtros del Explorador.</p>
@@ -145,53 +148,112 @@ function fmtJobDate(iso: string | null | undefined) {
   } catch { return iso; }
 }
 
+/** Timestamp del inicio real del job en el servidor (no cuando se abrió la página). */
+function parseJobStartedAt(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  try {
+    const t = new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
+    return Number.isNaN(t) ? null : t;
+  } catch {
+    return null;
+  }
+}
+
+function jobElapsedSeconds(job: AIJob, now = Date.now()): number | null {
+  const start = parseJobStartedAt(job.started_at);
+  if (start == null) return null;
+  const end =
+    job.status === "running" || job.status === "pending"
+      ? now
+      : parseJobStartedAt(job.finished_at) ?? now;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
 function AIAnalysisSection() {
   const [jobType,  setJobType]  = useState<"conexiones" | "redundancia" | "all">("conexiones");
   const [carrera,  setCarrera]  = useState("");
-  const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error">("idle");
-  const [jobId,    setJobId]    = useState<number | null>(null);
+  const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error" | "cancelled">("idle");
   const [job,      setJob]      = useState<AIJob | null>(null);
   const [latest,   setLatest]   = useState<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] } | null>(null);
   const [stats,    setStats]    = useState<AIStats | null>(null);
   const [msg,      setMsg]      = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed,  setElapsed]  = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeJobIdRef = useRef<number | null>(null);
 
-  const pollJob = async (id: number) => {
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (elapsedRef.current) {
+      clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
+    }
+  };
+
+  const syncElapsedFromJob = (j: AIJob) => {
+    const start = parseJobStartedAt(j.started_at);
+    if (start == null) return;
+    setStartedAt(start);
+    const sec = jobElapsedSeconds(j);
+    if (sec != null) setElapsed(sec);
+  };
+
+  const pollJob = async (): Promise<boolean> => {
     try {
-      const j = await getAIJobStatus(id);
+      let j: AIJob;
+      try {
+        j = await getAICurrentJob();
+      } catch {
+        if (!activeJobIdRef.current) return false;
+        j = await getAIJobStatus(activeJobIdRef.current);
+      }
       setJob(j);
+      activeJobIdRef.current = j.id;
+      if (j.status === "running" || j.status === "pending") {
+        setPhase("running");
+        syncElapsedFromJob(j);
+      }
       if (j.status === "done") {
         setPhase("done");
-        setMsg(`Análisis completado. Revisa Conexiones IA o Redundancia.`);
+        syncElapsedFromJob(j);
+        setMsg("Análisis completado. Revisa Conexiones IA o Redundancia.");
         getAILatestJobs().then(setLatest).catch(() => {});
         getAIStats().then(setStats).catch(() => {});
         return true;
       }
       if (j.status === "error") {
         setPhase("error");
-        setMsg(j.error_msg || "El job falló sin mensaje de error.");
+        syncElapsedFromJob(j);
+        setMsg(j.error_msg || "El análisis falló sin mensaje de error.");
+        return true;
+      }
+      if (j.status === "cancelled") {
+        setPhase("cancelled");
+        syncElapsedFromJob(j);
+        setMsg(j.error_msg || "Análisis cancelado.");
+        getAIStats().then(setStats).catch(() => {});
         return true;
       }
       return false;
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Error consultando estado del job");
+      setMsg(e instanceof Error ? e.message : "Error consultando el estado del análisis");
       return false;
     }
   };
 
-  const startPolling = (id: number) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollJob(id);
+  const startPolling = () => {
+    stopPolling();
+    pollJob();
     pollRef.current = setInterval(async () => {
-      const finished = await pollJob(id);
-      if (finished && pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-        if (elapsedRef.current) clearInterval(elapsedRef.current);
-      }
+      const finished = await pollJob();
+      if (finished) stopPolling();
     }, 2000);
   };
 
@@ -201,28 +263,25 @@ function AIAnalysisSection() {
         setLatest(r);
         if (r.running?.length > 0) {
           const active = r.running[0];
-          setJobId(active.id);
+          activeJobIdRef.current = active.id;
           setJob(active);
           setPhase("running");
-          setStartedAt(Date.now());
-          setMsg(`Job #${active.id} en curso — retomando seguimiento…`);
-          startPolling(active.id);
+          syncElapsedFromJob(active);
+          setMsg("Análisis en curso — retomando seguimiento…");
+          startPolling();
         }
       })
       .catch(() => {});
     getAIStats().then(setStats).catch(() => {});
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-    };
+    return () => stopPolling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (phase !== "running" || !startedAt) return;
-    elapsedRef.current = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
+    if (phase !== "running" || startedAt == null) return;
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    tick();
+    elapsedRef.current = setInterval(tick, 1000);
     return () => { if (elapsedRef.current) clearInterval(elapsedRef.current); };
   }, [phase, startedAt]);
 
@@ -230,26 +289,68 @@ function AIAnalysisSection() {
     setMsg("");
     setJob(null);
     setPhase("starting");
-    setStartedAt(Date.now());
+    setStartedAt(null);
     setElapsed(0);
+    activeJobIdRef.current = null;
     try {
       const r = await recomputeAI(jobType, carrera || undefined);
-      setJobId(r.job_id);
+      activeJobIdRef.current = r.job_id;
       setPhase("running");
       if (r.already_running) {
-        setMsg(`Job #${r.job_id} ya estaba en curso — mostrando progreso.`);
+        setMsg("Ya había un análisis en curso — mostrando progreso.");
       } else {
-        setMsg(`Job #${r.job_id} iniciado. Cada curso tarda ~2–5 s (Groq).`);
+        setMsg("Análisis iniciado. Cada curso tarda ~2–5 s (Groq).");
       }
-      startPolling(r.job_id);
+      startPolling();
     } catch (e) {
       setPhase("error");
-      setMsg(e instanceof Error ? e.message : "Error al iniciar el job.");
+      setMsg(e instanceof Error ? e.message : "Error al iniciar el análisis.");
+    }
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      const r = await cancelAIJob();
+      setJob(r.job);
+      activeJobIdRef.current = r.job.id;
+      setPhase("cancelled");
+      syncElapsedFromJob(r.job);
+      setMsg("Análisis cancelado.");
+      stopPolling();
+      getAIStats().then(setStats).catch(() => {});
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "No se pudo cancelar el análisis.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function handleClearAll() {
+    setClearing(true);
+    try {
+      const r = await clearAllAIResults();
+      stopPolling();
+      setPhase("idle");
+      setJob(null);
+      setStartedAt(null);
+      setElapsed(0);
+      activeJobIdRef.current = null;
+      setLatest({ conexiones: null, redundancia: null, running: [] });
+      setStats({ ra_pe: { total: 0, pending: 0, approved: 0, rejected: 0 }, redundancia: { total: 0, pending: 0 } });
+      setMsg(
+        `Eliminados: ${r.deleted.conexiones} conexiones, ${r.deleted.redundancia} redundancias, ${r.deleted.votes} votos.`
+      );
+      setShowClearConfirm(false);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "No se pudieron eliminar los resultados.");
+    } finally {
+      setClearing(false);
     }
   }
 
   const statusColor: Record<string, string> = {
-    pending: "#F59E0B", running: "#3B82F6", done: "#10B981", error: "#EF4444",
+    pending: "#F59E0B", running: "#3B82F6", done: "#10B981", error: "#EF4444", cancelled: "#F59E0B",
   };
 
   const progress = job?.progress;
@@ -305,7 +406,7 @@ function AIAnalysisSection() {
             ))}
           </select>
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <button
             disabled={isBusy}
             onClick={handleRecompute}
@@ -314,29 +415,44 @@ function AIAnalysisSection() {
             <RefreshCw size={13} className={isBusy ? "animate-spin" : ""} />
             {phase === "starting" ? "Iniciando…" : isBusy ? "Procesando…" : "Recalcular"}
           </button>
+          {isBusy && (
+            <button
+              disabled={cancelling || phase === "starting"}
+              onClick={handleCancel}
+              className="px-4 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-md hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+            >
+              {cancelling ? "Cancelando…" : "Cancelar"}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Panel de progreso */}
-      {(isBusy || phase === "done" || phase === "error") && (
+      {(isBusy || phase === "done" || phase === "error" || phase === "cancelled") && (
         <div className={`border rounded-lg p-4 mb-3 text-[12px] ${
           phase === "error" ? "border-[#FECACA] bg-[#FEF2F2]" :
           phase === "done" ? "border-[#BBF7D0] bg-[#F0FDF4]" :
+          phase === "cancelled" ? "border-[#FDE68A] bg-[#FFFBEB]" :
           "border-[#BFDBFE] bg-[#EFF6FF]"
         }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              {jobId && <span className="font-semibold text-[#111827]">Job #{jobId}</span>}
               {job && (
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{ color: statusColor[job.status] ?? "#6B7280", background: (statusColor[job.status] ?? "#6B7280") + "18" }}
                 >
-                  {job.status === "running" ? "En progreso" : job.status === "done" ? "Completado" : job.status === "error" ? "Error" : job.status}
+                  {job.status === "running" ? "En progreso" :
+                   job.status === "done" ? "Completado" :
+                   job.status === "error" ? "Error" :
+                   job.status === "cancelled" ? "Cancelado" : job.status}
                 </span>
               )}
+              {!job && phase === "starting" && (
+                <span className="text-[11px] text-[#6B7280]">Iniciando…</span>
+              )}
             </div>
-            {isBusy && startedAt && (
+            {(startedAt && elapsed > 0) && (
               <span className="text-[11px] text-[#6B7280]">Tiempo: {fmtElapsed(elapsed)}</span>
             )}
           </div>
@@ -383,6 +499,10 @@ function AIAnalysisSection() {
           {phase === "error" && (
             <p className="text-[#DC2626]">{msg || job?.error_msg}</p>
           )}
+
+          {phase === "cancelled" && (
+            <p className="text-[#92400E]">{msg || job?.error_msg || "Análisis cancelado."}</p>
+          )}
         </div>
       )}
 
@@ -392,15 +512,75 @@ function AIAnalysisSection() {
 
       <div className="text-[11px] text-[#9CA3AF] space-y-0.5">
         {latest?.conexiones && (
-          <p>Último job conexiones: #{latest.conexiones.id} completado {fmtJobDate(latest.conexiones.finished_at)}</p>
+          <p>Último análisis de conexiones: {fmtJobDate(latest.conexiones.finished_at)}</p>
         )}
         {latest?.redundancia && (
-          <p>Último job redundancia: #{latest.redundancia.id} completado {fmtJobDate(latest.redundancia.finished_at)}</p>
+          <p>Último análisis de redundancia: {fmtJobDate(latest.redundancia.finished_at)}</p>
         )}
         {phase === "idle" && !latest?.conexiones && !latest?.redundancia && (
           <p>Aún no se ha ejecutado ningún análisis IA. Haz clic en Recalcular para iniciar.</p>
         )}
       </div>
+
+      <div className="mt-5 pt-4 border-t border-[#E5E7EB]">
+        <p className="text-[11px] text-[#6B7280] mb-2">
+          Borra solo los resultados generados por IA (conexiones, redundancias y votos). Los Excel con RAs, PEs y matrices no se modifican.
+        </p>
+        <button
+          type="button"
+          disabled={isBusy || clearing || (stats?.ra_pe.total === 0 && stats?.redundancia.total === 0)}
+          onClick={() => setShowClearConfirm(true)}
+          className="flex items-center gap-1.5 px-4 py-1.5 border border-[#FECACA] text-[#DC2626] text-[12px] font-medium rounded-md hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+        >
+          <Trash2 size={13} />
+          Eliminar todos los resultados IA
+        </button>
+      </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[440px]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[15px] font-bold text-[#111827]">Eliminar resultados IA</h3>
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="text-[#9CA3AF] hover:text-[#374151]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[13px] text-[#374151] mb-2">
+              Se eliminarán permanentemente:
+            </p>
+            <ul className="text-[12px] text-[#6B7280] list-disc pl-5 mb-4 space-y-1">
+              <li>{stats?.ra_pe.total ?? 0} propuestas de conexiones RA→PE</li>
+              <li>{stats?.redundancia.total ?? 0} pares de redundancia</li>
+              <li>Todos los votos y el historial de jobs IA</li>
+            </ul>
+            <p className="text-[12px] text-[#9CA3AF] mb-5">
+              No se borran los objetivos, PEs ni matrices del currículo (Excel).
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-[12px] border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:bg-[#F9FAFB]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={clearing}
+                onClick={handleClearAll}
+                className="px-4 py-2 text-[12px] rounded-lg text-white font-medium bg-[#DC2626] hover:bg-[#B91C1C] disabled:opacity-50"
+              >
+                {clearing ? "Eliminando…" : "Sí, eliminar todo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -409,7 +589,7 @@ function StatMini({ label, val, sub }: { label: string; val: number; sub: string
   return (
     <div className="bg-[#F9FAFB] rounded-lg p-3">
       <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-[22px] font-bold text-[#111827] leading-tight">{val}</p>
+      <p className="text-[18px] font-bold text-[#111827] leading-tight">{val}</p>
       <p className="text-[11px] text-[#9CA3AF]">{sub}</p>
     </div>
   );

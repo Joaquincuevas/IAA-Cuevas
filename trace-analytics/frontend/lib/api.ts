@@ -147,7 +147,7 @@ export type AIJob = {
   id: number;
   job_type: string;
   carrera: string | null;
-  status: "pending" | "running" | "done" | "error";
+  status: "pending" | "running" | "done" | "error" | "cancelled";
   excel_hash: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -220,6 +220,21 @@ export async function recomputeAI(jobType: "conexiones" | "redundancia" | "all",
 
 export async function getAIJobStatus(jobId: number) {
   return apiFetch<AIJob>(`/api/ai/jobs/${jobId}`);
+}
+
+export async function getAICurrentJob() {
+  return apiFetch<AIJob>("/api/ai/jobs/current");
+}
+
+export async function cancelAIJob() {
+  return apiFetch<{ message: string; job: AIJob }>("/api/ai/cancel", { method: "POST" });
+}
+
+export async function clearAllAIResults() {
+  return apiFetch<{
+    message: string;
+    deleted: { votes: number; conexiones: number; redundancia: number; jobs: number };
+  }>("/api/ai/clear-all", { method: "POST" });
 }
 
 export async function getAILatestJobs() {

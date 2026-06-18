@@ -75,14 +75,13 @@ export default function RedundanciaPage() {
     if (!voting) return;
     setSubmitting(true);
     try {
-      await castAIVote("redundancy", voting.id, voting.voto, comentario || undefined);
+      const { proposal } = await castAIVote("redundancy", voting.id, voting.voto, comentario || undefined);
       setProposals((prev) =>
-        prev.map((p) =>
-          p.id === voting.id
-            ? { ...p, status: voting.voto === "approve" ? "approved" : "rejected" }
-            : p
-        )
+        prev.map((p) => (p.id === voting.id ? { ...p, ...proposal } : p))
       );
+      getAIStats(carrera).then(setStats).catch(() => {});
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "No se pudo guardar el voto.");
     } finally {
       setSubmitting(false);
       setVoting(null);
@@ -91,18 +90,18 @@ export default function RedundanciaPage() {
   }
 
   return (
-    <div className="p-9 max-w-[1400px]">
+    <div className="p-7 max-w-[1400px]">
       {/* Header */}
-      <div className="mb-7">
-        <h1 className="text-[26px] font-bold text-[#111827] tracking-tight">Redundancia de objetivos</h1>
-        <p className="text-[14px] text-[#6B7280] mt-1">
+      <div className="mb-5">
+        <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Redundancia de objetivos</h1>
+        <p className="text-[13px] text-[#6B7280] mt-0.5">
           Pares de Resultados de Aprendizaje semánticamente similares detectados por IA.
           Confirma si son redundantes o descártalos como complementarios.
         </p>
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-3 gap-5 mb-7">
+      <div className="grid grid-cols-3 gap-4 mb-5">
         <KpiCard label="PARES DETECTADOS" value={stats?.redundancia.total ?? 0}   dot="#6B7280" sub="Por IA (TF-IDF + Groq)" />
         <KpiCard label="PENDIENTES"        value={stats?.redundancia.pending ?? 0} dot="#F59E0B" sub="Sin revisar" />
         <KpiCard
@@ -308,9 +307,9 @@ function RABlock({ raId, curso, texto }: { raId: string; curso: string; texto: s
 
 function KpiCard({ label, value, dot, sub }: { label: string; value: number; dot: string; sub: string }) {
   return (
-    <div className="border border-[#E5E7EB] rounded-2xl p-6">
-      <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2.5">{label}</p>
-      <p className="text-[34px] font-bold text-[#111827] leading-none mb-2.5 tracking-tight">{value.toLocaleString()}</p>
+    <div className="border border-[#E5E7EB] rounded-xl p-5">
+      <p className="text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2">{label}</p>
+      <p className="text-[28px] font-bold text-[#111827] leading-none mb-2 tracking-tight">{value.toLocaleString()}</p>
       <p className="text-[12px] text-[#9CA3AF] flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: dot }} /> {sub}
       </p>

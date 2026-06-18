@@ -47,8 +47,8 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center">
         <div className="w-full max-w-md px-6">
           <div className="text-center mb-8">
-            <h1 className="text-[24px] font-bold text-[#111827] tracking-tight">Trace Analytics</h1>
-            <p className="text-[13px] text-[#9CA3AF] mt-1.5">powered by Taula</p>
+            <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Trace Analytics</h1>
+            <p className="text-[12px] text-[#9CA3AF] mt-1">powered by Taula</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
@@ -58,7 +58,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-3 text-[15px] border border-[#E5E7EB] rounded-lg outline-none focus:border-[#1B2A4A] focus:ring-2 focus:ring-[#1B2A4A]/10 transition-all"
+              className="w-full px-4 py-2.5 text-[14px] border border-[#E5E7EB] rounded-lg outline-none focus:border-[#1B2A4A] focus:ring-2 focus:ring-[#1B2A4A]/10 transition-all"
             />
 
             <div className="relative">
@@ -68,7 +68,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 pr-11 text-[15px] border border-[#E5E7EB] rounded-lg outline-none focus:border-[#1B2A4A] focus:ring-2 focus:ring-[#1B2A4A]/10 transition-all"
+                className="w-full px-4 py-2.5 pr-11 text-[14px] border border-[#E5E7EB] rounded-lg outline-none focus:border-[#1B2A4A] focus:ring-2 focus:ring-[#1B2A4A]/10 transition-all"
               />
               <button
                 type="button"
@@ -86,7 +86,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 mt-1 bg-[#111827] text-white text-[15px] font-medium rounded-lg hover:bg-[#1f2937] disabled:opacity-60 transition-colors"
+              className="w-full py-2.5 mt-1 bg-[#111827] text-white text-[14px] font-medium rounded-lg hover:bg-[#1f2937] disabled:opacity-60 transition-colors"
             >
               {loading ? "Iniciando sesión…" : "Iniciar sesión"}
             </button>
