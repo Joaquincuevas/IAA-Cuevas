@@ -37,13 +37,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-white">
       {/* Sidebar */}
-      <aside className="w-[150px] flex-shrink-0 flex flex-col border-r border-[#E5E7EB] py-5 px-3 h-full">
+      <aside className="w-[200px] flex-shrink-0 flex flex-col border-r border-[#E5E7EB] py-5 px-3 h-full">
         <div className="mb-6 px-2">
-          <p className="text-[12px] font-bold text-[#111827] leading-tight">Trace Analytics</p>
-          <p className="text-[10px] text-[#9CA3AF] mt-0.5">powered by Taula</p>
+          <p className="text-[15px] font-bold text-[#111827] leading-tight tracking-tight">Trace Analytics</p>
+          <p className="text-[11px] text-[#9CA3AF] mt-0.5">powered by Taula</p>
         </div>
 
-        <nav className="flex flex-col gap-0.5 flex-1">
+        <nav className="flex flex-col gap-1 flex-1">
           {NAV.map(({ href, label, icon: Icon, badge }) => {
             const isActive =
               href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -51,40 +51,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] transition-colors ${
+                className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
                   isActive
-                    ? "font-bold text-[#111827] border-l-2 border-[#1B2A4A] pl-[6px]"
-                    : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB]"
+                    ? "font-semibold text-white bg-[#1B2A4A]"
+                    : "text-[#4B5563] hover:text-[#111827] hover:bg-[#F3F4F6]"
                 }`}
               >
-                <span className="flex items-center gap-1.5">
-                  <Icon size={13} />
+                <span className="flex items-center gap-2">
+                  <Icon size={16} />
                   {label}
                 </span>
                 {badge && (
-                  <Plus size={11} className="text-[#9CA3AF]" />
+                  <Plus size={12} className={isActive ? "text-white/70" : "text-[#9CA3AF]"} />
                 )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-[#E5E7EB] pt-2 mt-3">
+        <div className="border-t border-[#E5E7EB] pt-3 mt-3">
           <Link
             href="/dashboard/configuracion"
-            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[12px] transition-colors mb-2 ${
+            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors mb-2.5 ${
               pathname.startsWith("/dashboard/configuracion")
-                ? "font-bold text-[#111827] border-l-2 border-[#1B2A4A] pl-[6px]"
-                : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F9FAFB]"
+                ? "font-semibold text-white bg-[#1B2A4A]"
+                : "text-[#4B5563] hover:text-[#111827] hover:bg-[#F3F4F6]"
             }`}
           >
-            <Settings size={13} /> Configuración
+            <Settings size={16} /> Configuración
           </Link>
-          <div className="px-2">
-            <p className="text-[10px] text-[#9CA3AF] truncate mb-1">{user.email}</p>
+          <div className="px-2.5">
+            <p className="text-[13px] font-semibold text-[#111827] truncate leading-tight">{user.name}</p>
+            <p className="text-[11px] text-[#9CA3AF] truncate mb-1">{user.email}</p>
             <button
               onClick={handleLogout}
-              className="text-[11px] text-red-500 hover:text-red-600 font-medium transition-colors"
+              className="text-[12px] text-red-500 hover:text-red-600 font-medium transition-colors"
             >
               Cerrar sesión
             </button>
