@@ -31,6 +31,11 @@ type Row = {
 
 const PAGE_SIZE = 200;
 
+const SELECT_CLS =
+  "h-9 px-2.5 text-[13px] border border-[#E5E7EB] rounded-md bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
+const SEARCH_CLS =
+  "w-full h-9 pl-9 pr-3 text-[13px] border border-[#E5E7EB] rounded-md bg-white text-[#111827] outline-none focus:border-[#1B2A4A] transition-colors";
+
 export default function ExploradorPage() {
   const [carrera, setCarrera] = useState("ICC");
   const [loading, setLoading] = useState(true);
@@ -162,12 +167,12 @@ export default function ExploradorPage() {
       {/* Filtros */}
       <div className="flex items-end gap-3 flex-wrap mb-4">
         <Field label="Carrera">
-          <select value={carrera} onChange={(e) => setCarrera(e.target.value)} className="ta-select">
+          <select value={carrera} onChange={(e) => setCarrera(e.target.value)} className={SELECT_CLS}>
             {CARRERAS.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
           </select>
         </Field>
         <Field label="Perfil de egreso">
-          <select value={fPE} onChange={(e) => setFPE(e.target.value)} className="ta-select min-w-[220px]">
+          <select value={fPE} onChange={(e) => setFPE(e.target.value)} className={`${SELECT_CLS} min-w-[220px]`}>
             <option value="Todos">Todos los perfiles</option>
             {peOptions.map(([pe, desc]) => (
               <option key={pe} value={pe}>{pe} · {desc.slice(0, 60)}</option>
@@ -175,20 +180,20 @@ export default function ExploradorPage() {
           </select>
         </Field>
         <Field label="Nivel">
-          <select value={fNivel} onChange={(e) => setFNivel(e.target.value)} className="ta-select">
+          <select value={fNivel} onChange={(e) => setFNivel(e.target.value)} className={SELECT_CLS}>
             {["Todos", "Alta", "Media", "Baja"].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </Field>
         <Field label="Curso">
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={fCurso} onChange={(e) => setFCurso(e.target.value)} placeholder="código o nombre…" className="ta-input pl-8 w-[180px]" />
+          <div className="relative w-[180px]">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
+            <input value={fCurso} onChange={(e) => setFCurso(e.target.value)} placeholder="código o nombre…" className={SEARCH_CLS} />
           </div>
         </Field>
         <Field label="Objetivo (RA)">
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-            <input value={fRA} onChange={(e) => setFRA(e.target.value)} placeholder="buscar texto…" className="ta-input pl-8 w-[200px]" />
+          <div className="relative w-[200px]">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] pointer-events-none" />
+            <input value={fRA} onChange={(e) => setFRA(e.target.value)} placeholder="buscar texto…" className={SEARCH_CLS} />
           </div>
         </Field>
         {activeFilters > 0 && (
@@ -249,13 +254,6 @@ export default function ExploradorPage() {
         </div>
       )}
 
-      <style jsx>{`
-        .ta-select, .ta-input {
-          height: 36px; padding: 0 10px; font-size: 13px;
-          border: 1px solid #E5E7EB; border-radius: 6px; outline: none; background: #fff; color: #111827;
-        }
-        .ta-select:focus, .ta-input:focus { border-color: #1B2A4A; }
-      `}</style>
     </div>
   );
 }
