@@ -42,24 +42,24 @@ export default function ConfiguracionPage() {
   }, []);
 
   return (
-    <div className="p-9 max-w-5xl">
-      <div className="mb-7">
-        <h1 className="text-[26px] font-bold text-[#111827] tracking-tight">Configuración</h1>
-        <p className="text-[14px] text-[#6B7280] mt-1">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
+    <div className="p-7 max-w-5xl">
+      <div className="mb-5">
+        <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Configuración</h1>
+        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
       </div>
 
       {/* Análisis IA — full width */}
       <AIAnalysisSection />
 
-      <div className="grid grid-cols-2 gap-5 mt-5">
+      <div className="grid grid-cols-2 gap-4 mt-5">
         {/* Perfil */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <User size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Perfil</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Perfil</h2>
           </div>
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[16px] font-bold">
+            <div className="w-11 h-11 rounded-full bg-[#1B2A4A] text-white flex items-center justify-center text-[15px] font-bold">
               {me?.name?.[0] ?? "?"}
             </div>
             <div>
@@ -75,19 +75,19 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Cambiar contraseña */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Lock size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Cambiar contraseña</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Cambiar contraseña</h2>
           </div>
           <ChangePasswordForm />
         </section>
 
         {/* Últimas conversaciones */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
           </div>
           {chats.length === 0 ? (
             <p className="text-[12px] text-[#9CA3AF]">Aún no has conversado con la IA.</p>
@@ -106,10 +106,10 @@ export default function ConfiguracionPage() {
         </section>
 
         {/* Filtros guardados */}
-        <section className="border border-[#E5E7EB] rounded-2xl p-6">
+        <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <Filter size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[16px] font-bold text-[#111827]">Filtros guardados</h2>
+            <h2 className="text-[14px] font-bold text-[#111827]">Filtros guardados</h2>
           </div>
           {filters.length === 0 ? (
             <p className="text-[12px] text-[#9CA3AF]">No has guardado filtros del Explorador.</p>
@@ -589,7 +589,7 @@ function StatMini({ label, val, sub }: { label: string; val: number; sub: string
   return (
     <div className="bg-[#F9FAFB] rounded-lg p-3">
       <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-[22px] font-bold text-[#111827] leading-tight">{val}</p>
+      <p className="text-[18px] font-bold text-[#111827] leading-tight">{val}</p>
       <p className="text-[11px] text-[#9CA3AF]">{sub}</p>
     </div>
   );

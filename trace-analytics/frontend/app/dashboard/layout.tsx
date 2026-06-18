@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className="w-[200px] flex-shrink-0 flex flex-col border-r border-[#E5E7EB] py-5 px-3 h-full">
         <div className="mb-6 px-2">
-          <p className="text-[15px] font-bold text-[#111827] leading-tight tracking-tight">Trace Analytics</p>
+          <p className="text-[14px] font-bold text-[#111827] leading-tight tracking-tight">Trace Analytics</p>
           <p className="text-[11px] text-[#9CA3AF] mt-0.5">powered by Taula</p>
         </div>
 
@@ -51,7 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${
+                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors ${
                   isActive
                     ? "font-semibold text-white bg-[#1B2A4A]"
                     : "text-[#4B5563] hover:text-[#111827] hover:bg-[#F3F4F6]"
@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="border-t border-[#E5E7EB] pt-3 mt-3">
           <Link
             href="/dashboard/configuracion"
-            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors mb-2.5 ${
+            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors mb-2.5 ${
               pathname.startsWith("/dashboard/configuracion")
                 ? "font-semibold text-white bg-[#1B2A4A]"
                 : "text-[#4B5563] hover:text-[#111827] hover:bg-[#F3F4F6]"
