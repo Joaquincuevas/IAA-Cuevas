@@ -74,40 +74,40 @@ export default function TaulaPage() {
   return (
     <div className="flex flex-col h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between px-10 py-5 border-b border-[#E5E7EB]">
+      <div className="flex items-center justify-between px-8 py-4 border-b border-[#E5E7EB]">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Taula</h1>
-            <span className="text-[11.5px] font-medium px-2.5 py-0.5 bg-[#F3F4F6] border border-[#E5E7EB] rounded-md text-[#6B7280]">
+          <div className="flex items-center gap-2">
+            <h1 className="text-[18px] font-bold text-[#111827]">✦ Taula</h1>
+            <span className="text-[10px] font-medium px-2 py-0.5 bg-[#F3F4F6] border border-[#E5E7EB] rounded text-[#6B7280]">
               IA · Llama
             </span>
           </div>
-          <p className="text-[14px] text-[#6B7280] mt-1">
+          <p className="text-[12px] text-[#6B7280] mt-0.5">
             Asistente de análisis curricular · Facultad de Ingeniería UAndes
           </p>
         </div>
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 text-[13.5px] text-[#6B7280] hover:text-[#111827] transition-colors"
+          className="flex items-center gap-1.5 text-[12px] text-[#6B7280] hover:text-[#111827] transition-colors"
         >
-          <RefreshCw size={15} /> Nueva conversación
+          <RefreshCw size={13} /> Nueva conversación
         </button>
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-10 py-7 space-y-5">
+      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
         {/* Welcome message */}
-        <div className="flex items-start gap-3 max-w-2xl">
-          <div className="w-9 h-9 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Sparkles size={16} className="text-white" />
+        <div className="flex items-start gap-3 max-w-xl">
+          <div className="w-7 h-7 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Sparkles size={12} className="text-white" />
           </div>
-          <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-5 py-3.5">
-            <p className="text-[15px] text-[#111827] leading-relaxed">
+          <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-4 py-3">
+            <p className="text-[13px] text-[#111827] leading-relaxed">
               Hola {user?.name ?? "estudiante"}. Soy Taula, tu asistente curricular. Puedo ayudarte a explorar conexiones
               entre cursos, evaluar cobertura del perfil de egreso, detectar redundancias y responder
               preguntas sobre los 672 objetivos de aprendizaje de Ingeniería UAndes. ¿Por dónde partimos?
             </p>
-            <p className="text-[11.5px] text-[#9CA3AF] mt-2">Taula · ahora</p>
+            <p className="text-[10px] text-[#9CA3AF] mt-2">✦ Taula · ahora</p>
           </div>
         </div>
 
@@ -118,24 +118,24 @@ export default function TaulaPage() {
             className={`flex items-start gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}
           >
             {m.role === "assistant" ? (
-              <div className="w-9 h-9 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Sparkles size={16} className="text-white" />
+              <div className="w-7 h-7 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Sparkles size={12} className="text-white" />
               </div>
             ) : (
-              <div className="w-9 h-9 rounded-full bg-[#111827] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-[13px] font-bold text-white">{initial}</span>
+              <div className="w-7 h-7 rounded-full bg-[#111827] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-white">{initial}</span>
               </div>
             )}
             <div
-              className={`max-w-2xl rounded-2xl px-5 py-3.5 ${
+              className={`max-w-xl rounded-xl px-4 py-3 ${
                 m.role === "user"
                   ? "bg-[#111827] text-white"
                   : "bg-[#F9FAFB] border border-[#E5E7EB] text-[#111827]"
               }`}
             >
-              <p className="text-[15px] leading-relaxed">{formatContent(m.content)}</p>
+              <p className="text-[13px] leading-relaxed">{formatContent(m.content)}</p>
               {m.role === "assistant" && (
-                <p className="text-[11.5px] text-[#9CA3AF] mt-2">Taula · ahora</p>
+                <p className="text-[10px] text-[#9CA3AF] mt-2">✦ Taula · ahora</p>
               )}
             </div>
           </div>
@@ -143,15 +143,15 @@ export default function TaulaPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-start gap-3 max-w-2xl">
-            <div className="w-9 h-9 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Sparkles size={16} className="text-white" />
+          <div className="flex items-start gap-3 max-w-xl">
+            <div className="w-7 h-7 rounded-full bg-[#1B2A4A] flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Sparkles size={12} className="text-white" />
             </div>
-            <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-5 py-3.5">
+            <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-4 py-3">
               <div className="flex gap-1 items-center h-5">
-                <div className="w-2 h-2 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] animate-bounce" style={{ animationDelay: "300ms" }} />
               </div>
             </div>
           </div>
@@ -162,12 +162,12 @@ export default function TaulaPage() {
 
       {/* Suggestions (shown only when no messages yet) */}
       {messages.length === 0 && (
-        <div className="px-10 pb-5 flex flex-wrap gap-2.5">
+        <div className="px-8 pb-4 flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               onClick={() => sendMessage(s)}
-              className="text-[13.5px] px-4 py-2 border border-[#E5E7EB] rounded-full text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] transition-colors"
+              className="text-[12px] px-3 py-1.5 border border-[#E5E7EB] rounded-full text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] transition-colors"
             >
               {s}
             </button>
@@ -176,8 +176,8 @@ export default function TaulaPage() {
       )}
 
       {/* Input */}
-      <div className="px-10 pb-7 pt-3 border-t border-[#E5E7EB]">
-        <div className="flex items-center gap-2.5 border border-[#E5E7EB] rounded-2xl px-5 py-3 focus-within:border-[#1B2A4A] transition-colors">
+      <div className="px-8 pb-6 pt-2 border-t border-[#E5E7EB]">
+        <div className="flex items-center gap-2 border border-[#E5E7EB] rounded-xl px-4 py-2.5 focus-within:border-[#1B2A4A] transition-colors">
           <input
             type="text"
             placeholder="Pregunta a Taula sobre la malla curricular…"
@@ -185,14 +185,14 @@ export default function TaulaPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
             disabled={loading}
-            className="flex-1 text-[15px] outline-none bg-transparent placeholder-[#9CA3AF]"
+            className="flex-1 text-[13px] outline-none bg-transparent placeholder-[#9CA3AF]"
           />
           <button
             onClick={() => sendMessage()}
             disabled={!input.trim() || loading}
-            className="w-9 h-9 rounded-xl bg-[#111827] flex items-center justify-center disabled:opacity-40 hover:bg-[#1f2937] transition-colors flex-shrink-0"
+            className="w-7 h-7 rounded-lg bg-[#111827] flex items-center justify-center disabled:opacity-40 hover:bg-[#1f2937] transition-colors"
           >
-            <Send size={16} className="text-white" />
+            <Send size={13} className="text-white" />
           </button>
         </div>
       </div>
