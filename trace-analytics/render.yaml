@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: trace-analytics-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MAX_WORKERS
+        value: "2"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false          # set to https://<your-app>.vercel.app
+      - key: DATA_PATH
+        value: /opt/render/project/src/data/RA_UandesFunctional.xlsx
+      - key: APP_DB
+        value: /data/app.db
+    disk:
+      name: trace-analytics-data
+      mountPath: /data
+      sizeGB: 1

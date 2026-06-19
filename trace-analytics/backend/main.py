@@ -23,9 +23,15 @@ import ai_engine
 load_dotenv(Path(__file__).parent / ".env")
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-# La clave de firma de JWT se toma del entorno; el valor por defecto es solo para
-# desarrollo local. En producción definir SECRET_KEY como variable de entorno.
-SECRET_KEY = os.environ.get("SECRET_KEY", "trace-analytics-dev-secret-change-me")
+_SECRET_KEY_DEFAULT = "trace-analytics-dev-secret-change-me"
+SECRET_KEY = os.environ.get("SECRET_KEY", _SECRET_KEY_DEFAULT)
+if SECRET_KEY == _SECRET_KEY_DEFAULT:
+    import warnings
+    warnings.warn(
+        "SECRET_KEY is using the insecure default value. "
+        "Set the SECRET_KEY environment variable before deploying to production.",
+        stacklevel=1,
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
 
@@ -445,22 +451,6 @@ def get_objectives(email: str = Depends(verify_token)):
         })
     # Use jsonable_encoder to convert numpy / pandas types safely
     return JSONResponse(content=jsonable_encoder({"objectives": rows}))
-
-
-@app.get("/api/objectives_public")
-def get_objectives_public():
-    """Endpoint público (solo para desarrollo) que devuelve objetivos con descripción sin requerir autenticación."""
-    data = get_data()
-    objectives = data.get("objectives")
-    rows = []
-    cols = set(objectives.columns.tolist())
-    for _, row in objectives.iterrows():
-        rows.append({
-            "curso": row["ID"] if "ID" in cols else "",
-            "id_objetivo": row["ID_Objetivo"] if "ID_Objetivo" in cols else "",
-            "descripcion": row["Objetivo"] if "Objetivo" in cols else "",
-        })
-    return {"objectives": rows}
 
 
 # ── Taula ──────────────────────────────────────────────────────────────────────
