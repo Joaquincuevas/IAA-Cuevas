@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { Download, Search, X, ThumbsUp, ThumbsDown, MessageSquare } from "lucide-react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { Download, SlidersHorizontal, X, ThumbsUp, ThumbsDown, MessageSquare, ChevronDown } from "lucide-react";
 import {
   getAIConexiones,
   getAIStats,
@@ -52,22 +52,46 @@ export default function ConexionesPage() {
   const [offset, setOffset]         = useState(0);
 
   // filters
-  const [fStatus, setFStatus] = useState("Todos");
-  const [fPE,     setFPE]     = useState("");
-  const [fCurso,  setFCurso]  = useState("");
-  const [fRA,     setFRA]     = useState("");
-  const [fSort,   setFSort]   = useState<SortOption>("confianza_desc");
+  const [fStatus, setFStatus]         = useState("Todos");
+  const [fPE,     setFPE]             = useState("");
+  const [fCurso,  setFCurso]          = useState("");
+  const [fRA,     setFRA]             = useState("");
+  const [fSort,   setFSort]           = useState<SortOption>("confianza_desc");
+  const [fConfMin, setFConfMin]       = useState(0);
+  const [fConfMax, setFConfMax]       = useState(100);
+
+  // filter popup
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const [popupPos, setPopupPos] = useState<{ top: number; right: number } | null>(null);
 
   // vote modal
   const [voting, setVoting]       = useState<{ id: number; voto: "approve" | "reject" } | null>(null);
   const [comentario, setComentario] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // Close popup on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      const target = e.target as Node;
+      const inBtn = filterBtnRef.current?.contains(target);
+      const inPopup = popupRef.current?.contains(target);
+      if (!inBtn && !inPopup) setFilterOpen(false);
+    }
+    if (filterOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [filterOpen]);
+
   const fetchData = useCallback(async (
     car: string,
     off: number,
     status: string,
     sort: SortOption,
+    confMin: number,
+    confMax: number,
   ) => {
     setLoading(true);
     try {
@@ -76,6 +100,8 @@ export default function ConexionesPage() {
           carrera: car,
           status: status !== "Todos" ? status : undefined,
           sort,
+          confianza_min: confMin / 100,
+          confianza_max: confMax / 100,
           limit: PAGE_SIZE,
           offset: off,
         }),
@@ -93,17 +119,36 @@ export default function ConexionesPage() {
 
   useEffect(() => {
     setOffset(0);
-    fetchData(carrera, 0, fStatus, fSort);
-  }, [carrera, fStatus, fSort, fetchData]);
+    fetchData(carrera, 0, fStatus, fSort, fConfMin, fConfMax);
+  }, [carrera, fStatus, fSort, fConfMin, fConfMax, fetchData]);
 
   const filtered = useMemo(() => {
     return proposals.filter((p) => {
-      if (fPE    && !p.pe_id.toLowerCase().includes(fPE.toLowerCase()))     return false;
+      if (fPE    && !p.pe_id.toLowerCase().includes(fPE.toLowerCase()))       return false;
       if (fCurso && !p.curso_id.toLowerCase().includes(fCurso.toLowerCase())) return false;
-      if (fRA    && !p.ra_texto.toLowerCase().includes(fRA.toLowerCase()))   return false;
+      if (fRA    && !p.ra_texto.toLowerCase().includes(fRA.toLowerCase()))     return false;
       return true;
     });
   }, [proposals, fPE, fCurso, fRA]);
+
+  // Count active filters (excluding carrera and sort)
+  const activeFilterCount = [
+    fStatus !== "Todos",
+    fPE !== "",
+    fCurso !== "",
+    fRA !== "",
+    fConfMin !== 0 || fConfMax !== 100,
+  ].filter(Boolean).length;
+
+  function clearAllFilters() {
+    setFStatus("Todos");
+    setFPE("");
+    setFCurso("");
+    setFRA("");
+    setFConfMin(0);
+    setFConfMax(100);
+    setFSort("confianza_desc");
+  }
 
   async function handleVote(id: number, voto: "approve" | "reject") {
     setVoting({ id, voto });
@@ -171,9 +216,9 @@ export default function ConexionesPage() {
         <KpiCard label="RECHAZADAS"        value={stats?.ra_pe.rejected ?? 0} dot="#EF4444" />
       </div>
 
-      {/* Filters row */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        {/* Carrera selector */}
+      {/* Controls row */}
+      <div className="flex items-center gap-3 mb-4">
+        {/* Carrera chips */}
         <div className="flex gap-1">
           {CARRERAS.map((c) => (
             <button
@@ -190,34 +235,212 @@ export default function ConexionesPage() {
           ))}
         </div>
 
-        {/* Status filter */}
-        <select
-          value={fStatus}
-          onChange={(e) => setFStatus(e.target.value)}
-          className="text-[13px] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#374151]"
-        >
-          <option>Todos</option>
-          <option value="pending">Pendientes</option>
-          <option value="approved">Aprobadas</option>
-          <option value="rejected">Rechazadas</option>
-        </select>
+        <div className="flex-1" />
 
-        {/* PE filter */}
-        <FilterInput value={fPE} onChange={setFPE} placeholder="PE…" />
-        {/* Curso filter */}
-        <FilterInput value={fCurso} onChange={setFCurso} placeholder="Curso…" />
-        {/* RA text filter */}
-        <FilterInput value={fRA} onChange={setFRA} placeholder="Buscar en RA…" wide />
+        {/* Active filter summary pill */}
+        {activeFilterCount > 0 && (
+          <button
+            onClick={clearAllFilters}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] text-[#6B7280] bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors"
+          >
+            <X size={12} />
+            Limpiar filtros ({activeFilterCount})
+          </button>
+        )}
 
-        <select
-          value={fSort}
-          onChange={(e) => setFSort(e.target.value as SortOption)}
-          className="text-[13px] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#374151]"
-        >
-          <option value="confianza_desc">Confianza: mayor a menor</option>
-          <option value="confianza_asc">Confianza: menor a mayor</option>
-        </select>
+        {/* Filters button */}
+        <div className="relative" ref={filterRef}>
+          <button
+            ref={filterBtnRef}
+            onClick={() => {
+              if (!filterOpen && filterBtnRef.current) {
+                const r = filterBtnRef.current.getBoundingClientRect();
+                setPopupPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+              }
+              setFilterOpen((v) => !v);
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors ${
+              filterOpen || activeFilterCount > 0
+                ? "bg-[#1B2A4A] text-white border-[#1B2A4A]"
+                : "border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB]"
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="ml-0.5 bg-white text-[#1B2A4A] text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown size={13} className={`transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {/* Filter popup — fixed so overflow-hidden on layout doesn't clip it */}
+          {filterOpen && popupPos && (
+            <div
+              ref={popupRef}
+              className="fixed z-50 bg-white border border-[#E5E7EB] rounded-xl shadow-lg w-[320px] max-h-[80vh] overflow-y-auto p-5"
+              style={{ top: popupPos.top, right: popupPos.right }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[13px] font-semibold text-[#111827]">Filtros</span>
+                <button onClick={() => setFilterOpen(false)} className="text-[#9CA3AF] hover:text-[#374151]">
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Confidence range */}
+              <div className="mb-5">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-3">
+                  Confianza IA
+                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13px] font-semibold" style={{ color: CONF_COLOR(fConfMin / 100) }}>
+                    {fConfMin}%
+                  </span>
+                  <span className="text-[11px] text-[#9CA3AF]">—</span>
+                  <span className="text-[13px] font-semibold" style={{ color: CONF_COLOR(fConfMax / 100) }}>
+                    {fConfMax}%
+                  </span>
+                </div>
+                <DualRangeSlider
+                  min={0} max={100}
+                  valueMin={fConfMin} valueMax={fConfMax}
+                  onChange={(lo, hi) => { setFConfMin(lo); setFConfMax(hi); }}
+                />
+                {/* Quick presets */}
+                <div className="flex gap-1.5 mt-3 flex-wrap">
+                  {[
+                    { label: "≥ 80%", lo: 80, hi: 100 },
+                    { label: "60–80%", lo: 60, hi: 80 },
+                    { label: "40–60%", lo: 40, hi: 60 },
+                    { label: "< 40%", lo: 0, hi: 40 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => { setFConfMin(preset.lo); setFConfMax(preset.hi); }}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                        fConfMin === preset.lo && fConfMax === preset.hi
+                          ? "bg-[#1B2A4A] text-white"
+                          : "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-[#F3F4F6] mb-4" />
+
+              {/* Status */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-2">
+                  Estado
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { value: "Todos", label: "Todos" },
+                    { value: "pending",  label: "Pendiente" },
+                    { value: "approved", label: "Aprobada" },
+                    { value: "rejected", label: "Rechazada" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setFStatus(opt.value)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                        fStatus === opt.value
+                          ? "bg-[#1B2A4A] text-white"
+                          : "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* PE */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-2">
+                  Perfil de Egreso (PE)
+                </label>
+                <InlineInput value={fPE} onChange={setFPE} placeholder="Ej: PE6, PE10…" />
+              </div>
+
+              {/* Curso */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-2">
+                  Curso
+                </label>
+                <InlineInput value={fCurso} onChange={setFCurso} placeholder="Ej: ICC_3103…" />
+              </div>
+
+              {/* RA text */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-2">
+                  Texto del RA
+                </label>
+                <InlineInput value={fRA} onChange={setFRA} placeholder="Buscar en objetivos…" />
+              </div>
+
+              <div className="border-t border-[#F3F4F6] mb-4" />
+
+              {/* Sort */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide mb-2">
+                  Ordenar por
+                </label>
+                <select
+                  value={fSort}
+                  onChange={(e) => setFSort(e.target.value as SortOption)}
+                  className="w-full text-[13px] border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#374151] focus:outline-none focus:border-[#1B2A4A]"
+                >
+                  <option value="confianza_desc">Confianza: mayor a menor</option>
+                  <option value="confianza_asc">Confianza: menor a mayor</option>
+                </select>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-2">
+                <button
+                  onClick={clearAllFilters}
+                  className="flex-1 py-2 text-[12px] border border-[#E5E7EB] rounded-lg text-[#6B7280] hover:bg-[#F9FAFB] transition-colors"
+                >
+                  Limpiar todo
+                </button>
+                <button
+                  onClick={() => setFilterOpen(false)}
+                  className="flex-1 py-2 text-[12px] bg-[#1B2A4A] text-white rounded-lg hover:bg-[#243560] transition-colors font-medium"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Active filter pills summary */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {fStatus !== "Todos" && (
+            <FilterPill label={`Estado: ${STATUS_LABELS[fStatus]?.label ?? fStatus}`} onRemove={() => setFStatus("Todos")} />
+          )}
+          {(fConfMin !== 0 || fConfMax !== 100) && (
+            <FilterPill label={`Confianza: ${fConfMin}%–${fConfMax}%`} onRemove={() => { setFConfMin(0); setFConfMax(100); }} />
+          )}
+          {fPE && (
+            <FilterPill label={`PE: ${fPE}`} onRemove={() => setFPE("")} />
+          )}
+          {fCurso && (
+            <FilterPill label={`Curso: ${fCurso}`} onRemove={() => setFCurso("")} />
+          )}
+          {fRA && (
+            <FilterPill label={`RA: "${fRA}"`} onRemove={() => setFRA("")} />
+          )}
+        </div>
+      )}
 
       {/* Table */}
       {loading ? (
@@ -318,7 +541,7 @@ export default function ConexionesPage() {
           <div className="flex gap-2">
             <button
               disabled={offset === 0}
-              onClick={() => { const o = Math.max(0, offset - PAGE_SIZE); setOffset(o); fetchData(carrera, o, fStatus, fSort); }}
+              onClick={() => { const o = Math.max(0, offset - PAGE_SIZE); setOffset(o); fetchData(carrera, o, fStatus, fSort, fConfMin, fConfMax); }}
               className="px-3 py-1 border border-[#E5E7EB] rounded-md hover:bg-[#F9FAFB] disabled:opacity-40"
             >
               Anterior
@@ -328,7 +551,7 @@ export default function ConexionesPage() {
             </span>
             <button
               disabled={offset + PAGE_SIZE >= total}
-              onClick={() => { const o = offset + PAGE_SIZE; setOffset(o); fetchData(carrera, o, fStatus, fSort); }}
+              onClick={() => { const o = offset + PAGE_SIZE; setOffset(o); fetchData(carrera, o, fStatus, fSort, fConfMin, fConfMax); }}
               className="px-3 py-1 border border-[#E5E7EB] rounded-md hover:bg-[#F9FAFB] disabled:opacity-40"
             >
               Siguiente
@@ -388,6 +611,8 @@ export default function ConexionesPage() {
   );
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
 function KpiCard({ label, value, dot }: { label: string; value: number; dot: string }) {
   return (
     <div className="border border-[#E5E7EB] rounded-xl p-5">
@@ -400,25 +625,91 @@ function KpiCard({ label, value, dot }: { label: string; value: number; dot: str
   );
 }
 
-function FilterInput({
-  value, onChange, placeholder, wide,
-}: {
-  value: string; onChange: (v: string) => void; placeholder: string; wide?: boolean;
-}) {
+function FilterPill({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <div className={`relative flex items-center ${wide ? "flex-1 min-w-[200px]" : ""}`}>
-      <Search size={13} className="absolute left-2.5 text-[#9CA3AF] pointer-events-none" />
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEF2FF] text-[#1B2A4A] text-[11px] font-medium rounded-full">
+      {label}
+      <button onClick={onRemove} className="hover:text-[#EF4444] transition-colors">
+        <X size={10} />
+      </button>
+    </span>
+  );
+}
+
+function InlineInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative flex items-center">
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="pl-8 pr-7 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg w-full focus:outline-none focus:border-[#1B2A4A]"
+        className="w-full pl-3 pr-7 py-2 text-[13px] border border-[#E5E7EB] rounded-lg focus:outline-none focus:border-[#1B2A4A]"
       />
       {value && (
         <button onClick={() => onChange("")} className="absolute right-2.5 text-[#9CA3AF] hover:text-[#374151]">
           <X size={12} />
         </button>
       )}
+    </div>
+  );
+}
+
+// Dual range slider using two overlapping <input type="range"> elements
+function DualRangeSlider({
+  min, max, valueMin, valueMax, onChange,
+}: {
+  min: number; max: number; valueMin: number; valueMax: number;
+  onChange: (lo: number, hi: number) => void;
+}) {
+  const range = max - min;
+  const leftPct  = ((valueMin - min) / range) * 100;
+  const rightPct = ((valueMax - min) / range) * 100;
+
+  function handleMin(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = Math.min(Number(e.target.value), valueMax - 1);
+    onChange(v, valueMax);
+  }
+  function handleMax(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = Math.max(Number(e.target.value), valueMin + 1);
+    onChange(valueMin, v);
+  }
+
+  return (
+    <div className="relative h-6 flex items-center">
+      {/* Track background */}
+      <div className="absolute w-full h-1.5 bg-[#E5E7EB] rounded-full" />
+      {/* Active track */}
+      <div
+        className="absolute h-1.5 bg-[#1B2A4A] rounded-full"
+        style={{ left: `${leftPct}%`, right: `${100 - rightPct}%` }}
+      />
+      {/* Min thumb */}
+      <input
+        type="range"
+        min={min} max={max} step={1}
+        value={valueMin}
+        onChange={handleMin}
+        className="absolute w-full h-full opacity-0 cursor-pointer z-20"
+        style={{ pointerEvents: valueMin >= valueMax - 1 ? "none" : undefined }}
+      />
+      {/* Max thumb */}
+      <input
+        type="range"
+        min={min} max={max} step={1}
+        value={valueMax}
+        onChange={handleMax}
+        className="absolute w-full h-full opacity-0 cursor-pointer z-20"
+      />
+      {/* Visual thumb min */}
+      <div
+        className="absolute w-4 h-4 bg-white border-2 border-[#1B2A4A] rounded-full shadow-sm z-10 -translate-x-1/2 pointer-events-none"
+        style={{ left: `${leftPct}%` }}
+      />
+      {/* Visual thumb max */}
+      <div
+        className="absolute w-4 h-4 bg-white border-2 border-[#1B2A4A] rounded-full shadow-sm z-10 -translate-x-1/2 pointer-events-none"
+        style={{ left: `${rightPct}%` }}
+      />
     </div>
   );
 }

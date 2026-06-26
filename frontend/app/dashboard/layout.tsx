@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, GitMerge, GitBranch, Settings } from "lucide-react";
+import { Home, GitMerge, GitBranch, Cpu, Settings } from "lucide-react";
 import { isAuthenticated, getUser, clearAuth } from "@/lib/auth";
 
 const NAV = [
-  { href: "/dashboard",             label: "Inicio",        icon: Home },
-  { href: "/dashboard/conexiones",  label: "Conexiones IA", icon: GitMerge },
-  { href: "/dashboard/redundancia", label: "Redundancia",   icon: GitBranch },
+  { href: "/dashboard",               label: "Inicio",        icon: Home },
+  { href: "/dashboard/conexiones",    label: "Conexiones IA", icon: GitMerge },
+  { href: "/dashboard/redundancia",   label: "Redundancia",   icon: GitBranch },
+  { href: "/dashboard/analisis-ia",   label: "Análisis IA",   icon: Cpu },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
