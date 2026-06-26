@@ -398,11 +398,22 @@ def bulk_insert_ra_pe(job_id: int, proposals: list[dict]) -> int:
     return len(rows)
 
 
+def _ra_pe_order_clause(sort: str | None) -> str:
+    if sort == "confianza_asc":
+        return "confianza ASC, id ASC"
+    if sort == "curso":
+        return "carrera, curso_id, pe_id, confianza DESC"
+    return "confianza DESC, id DESC"
+
+
 def get_ra_pe_proposals(
     carrera: str | None = None,
     status: str | None = None,
     curso: str | None = None,
     pe: str | None = None,
+    confianza_min: float | None = None,
+    confianza_max: float | None = None,
+    sort: str | None = None,
     limit: int = 200,
     offset: int = 0,
 ) -> list[dict]:
@@ -421,20 +432,32 @@ def get_ra_pe_proposals(
     if pe:
         clauses.append("pe_id = ?")
         params.append(pe)
+    if confianza_min is not None:
+        clauses.append("confianza >= ?")
+        params.append(confianza_min)
+    if confianza_max is not None:
+        clauses.append("confianza <= ?")
+        params.append(confianza_max)
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    order = _ra_pe_order_clause(sort)
     params.extend([limit, offset])
 
     conn = _conn()
     rows = conn.execute(
-        f"SELECT * FROM ai_ra_pe_proposals {where} ORDER BY carrera, curso_id, pe_id, confianza DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM ai_ra_pe_proposals {where} ORDER BY {order} LIMIT ? OFFSET ?",
         params,
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def count_ra_pe_proposals(carrera: str | None = None, status: str | None = None) -> int:
+def count_ra_pe_proposals(
+    carrera: str | None = None,
+    status: str | None = None,
+    confianza_min: float | None = None,
+    confianza_max: float | None = None,
+) -> int:
     clauses: list[str] = []
     params: list[Any] = []
     if carrera:
@@ -443,6 +466,12 @@ def count_ra_pe_proposals(carrera: str | None = None, status: str | None = None)
     if status:
         clauses.append("status = ?")
         params.append(status)
+    if confianza_min is not None:
+        clauses.append("confianza >= ?")
+        params.append(confianza_min)
+    if confianza_max is not None:
+        clauses.append("confianza <= ?")
+        params.append(confianza_max)
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     conn = _conn()
     n = conn.execute(f"SELECT COUNT(*) FROM ai_ra_pe_proposals {where}", params).fetchone()[0]

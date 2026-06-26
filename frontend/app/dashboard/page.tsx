@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Download, ArrowRight, Sparkles } from "lucide-react";
+import { RefreshCw, Download, ArrowRight } from "lucide-react";
 import { getStats } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
@@ -18,12 +18,6 @@ const EXPLORE_CARDS = [
     title: "Redundancia",
     desc: "Pares de objetivos de aprendizaje semánticamente similares detectados por IA, para identificar repetición curricular.",
     href: "/dashboard/redundancia",
-  },
-  {
-    tag: "IA · CHAT",
-    title: "Taula",
-    desc: "Pregunta sobre la malla en lenguaje natural — análisis, brechas y comparaciones.",
-    href: "/dashboard/taula",
   },
 ];
 
@@ -67,9 +61,9 @@ export default function DashboardPage() {
       <div className="mb-7">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">Explorar</p>
-          <p className="text-[11px] text-[#9CA3AF]">3 módulos</p>
+          <p className="text-[11px] text-[#9CA3AF]">2 módulos</p>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {EXPLORE_CARDS.map((c) => (
             <Link
               key={c.href}
@@ -84,35 +78,6 @@ export default function DashboardPage() {
               </span>
             </Link>
           ))}
-        </div>
-      </div>
-
-      {/* Taula */}
-      <div className="mb-6">
-        <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase mb-3">Taula</p>
-        <div className="border border-[#E5E7EB] rounded-xl p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
-              <Sparkles size={18} className="text-[#1B2A4A]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[15px] font-bold text-[#111827]">Taula</span>
-                <span className="text-[11px] font-medium text-[#059669] bg-[#ECFDF5] border border-[#10B981]/20 px-2.5 py-0.5 rounded-full">
-                  Disponible
-                </span>
-              </div>
-              <p className="text-[13px] text-[#6B7280] mt-0.5">
-                Pregunta sobre la malla en lenguaje natural — análisis, brechas, comparaciones.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/dashboard/taula"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#111827] text-white text-[13px] font-medium rounded-lg hover:bg-[#1f2937] transition-colors flex-shrink-0"
-          >
-            Abrir Taula <ArrowRight size={14} />
-          </Link>
         </div>
       </div>
     </div>

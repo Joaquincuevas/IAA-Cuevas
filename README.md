@@ -4,7 +4,7 @@ Herramienta de análisis curricular para la Facultad de Ingeniería de la Univer
 
 - **Backend:** FastAPI (Docker) en Render Free
 - **Frontend:** Next.js (React) en Vercel
-- **IA:** Groq (Taula + análisis batch de conexiones y redundancia)
+- **IA:** Groq (análisis batch de conexiones y redundancia)
 - **Datos:** Excel curriculares en `data/` (incluidos en la imagen Docker)
 
 ---

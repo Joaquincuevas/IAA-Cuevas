@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { User, Lock, MessageSquare, Filter, Check, AlertCircle, RefreshCw, Cpu, Trash2, X } from "lucide-react";
+import { User, Lock, Filter, Check, AlertCircle, RefreshCw, Cpu, Trash2, X, FlaskConical } from "lucide-react";
 import {
   getMe,
   changePassword,
-  getChatHistory,
   getFilterHistory,
   recomputeAI,
   getAICurrentJob,
@@ -18,7 +17,7 @@ import {
   type AIStats,
 } from "@/lib/api";
 
-type Me = { email: string; name: string; role: string; last_login: string | null; actividad: { chats: number; filtros: number } };
+type Me = { email: string; name: string; role: string; last_login: string | null; actividad: { filtros: number } };
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -32,12 +31,10 @@ function fmtDate(iso: string | null): string {
 
 export default function ConfiguracionPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [chats, setChats] = useState<{ role: string; content: string; created_at: string }[]>([]);
   const [filters, setFilters] = useState<{ label: string; filters: Record<string, unknown>; created_at: string }[]>([]);
 
   useEffect(() => {
     getMe().then(setMe).catch(console.error);
-    getChatHistory().then((r) => setChats(r.messages)).catch(console.error);
     getFilterHistory().then((r) => setFilters(r.snapshots)).catch(console.error);
   }, []);
 
@@ -69,7 +66,6 @@ export default function ConfiguracionPage() {
           </div>
           <dl className="text-[12px] space-y-2">
             <Row k="Último ingreso" v={fmtDate(me?.last_login ?? null)} />
-            <Row k="Conversaciones guardadas" v={String(me?.actividad?.chats ?? 0)} />
             <Row k="Filtros guardados" v={String(me?.actividad?.filtros ?? 0)} />
           </dl>
         </section>
@@ -83,30 +79,8 @@ export default function ConfiguracionPage() {
           <ChangePasswordForm />
         </section>
 
-        {/* Últimas conversaciones */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Últimas conversaciones con Taula</h2>
-          </div>
-          {chats.length === 0 ? (
-            <p className="text-[12px] text-[#9CA3AF]">Aún no has conversado con la IA.</p>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-auto">
-              {chats.slice(-8).reverse().map((m, i) => (
-                <div key={i} className="text-[12px]">
-                  <span className={`font-semibold ${m.role === "user" ? "text-[#1B2A4A]" : "text-[#6B7280]"}`}>
-                    {m.role === "user" ? "Tú" : "Taula"}:
-                  </span>{" "}
-                  <span className="text-[#374151]">{m.content.slice(0, 120)}{m.content.length > 120 ? "…" : ""}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Filtros guardados */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5">
+        <section className="border border-[#E5E7EB] rounded-xl p-5 col-span-2">
           <div className="flex items-center gap-2 mb-3">
             <Filter size={15} className="text-[#1B2A4A]" />
             <h2 className="text-[14px] font-bold text-[#111827]">Filtros guardados</h2>
@@ -174,7 +148,12 @@ function AIAnalysisSection() {
   const [carrera,  setCarrera]  = useState("");
   const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error" | "cancelled">("idle");
   const [job,      setJob]      = useState<AIJob | null>(null);
-  const [latest,   setLatest]   = useState<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] } | null>(null);
+  const [latest,   setLatest]   = useState<{
+    conexiones: AIJob | null;
+    conexiones_prueba: AIJob | null;
+    redundancia: AIJob | null;
+    running: AIJob[];
+  } | null>(null);
   const [stats,    setStats]    = useState<AIStats | null>(null);
   const [msg,      setMsg]      = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -223,7 +202,11 @@ function AIAnalysisSection() {
       if (j.status === "done") {
         setPhase("done");
         syncElapsedFromJob(j);
-        setMsg("Análisis completado. Revisa Conexiones IA o Redundancia.");
+        setMsg(
+          j.job_type === "conexiones_prueba"
+            ? "Prueba completada. Revisa Conexiones IA."
+            : "Análisis completado. Revisa Conexiones IA o Redundancia."
+        );
         getAILatestJobs().then(setLatest).catch(() => {});
         getAIStats().then(setStats).catch(() => {});
         return true;
@@ -308,6 +291,33 @@ function AIAnalysisSection() {
     }
   }
 
+  async function handleTestRecompute() {
+    if (!carrera) {
+      setMsg("Selecciona una carrera para ejecutar la prueba.");
+      return;
+    }
+    setMsg("");
+    setJob(null);
+    setPhase("starting");
+    setStartedAt(null);
+    setElapsed(0);
+    activeJobIdRef.current = null;
+    try {
+      const r = await recomputeAI("conexiones_prueba", carrera);
+      activeJobIdRef.current = r.job_id;
+      setPhase("running");
+      if (r.already_running) {
+        setMsg("Ya había un análisis en curso — mostrando progreso.");
+      } else {
+        setMsg("Prueba iniciada: se generarán hasta 5 conexiones de ejemplo.");
+      }
+      startPolling();
+    } catch (e) {
+      setPhase("error");
+      setMsg(e instanceof Error ? e.message : "Error al iniciar la prueba.");
+    }
+  }
+
   async function handleCancel() {
     setCancelling(true);
     try {
@@ -336,7 +346,7 @@ function AIAnalysisSection() {
       setStartedAt(null);
       setElapsed(0);
       activeJobIdRef.current = null;
-      setLatest({ conexiones: null, redundancia: null, running: [] });
+      setLatest({ conexiones: null, conexiones_prueba: null, redundancia: null, running: [] });
       setStats({ ra_pe: { total: 0, pending: 0, approved: 0, rejected: 0 }, redundancia: { total: 0, pending: 0 } });
       setMsg(
         `Eliminados: ${r.deleted.conexiones} conexiones, ${r.deleted.redundancia} redundancias, ${r.deleted.votes} votos.`
@@ -406,7 +416,7 @@ function AIAnalysisSection() {
             ))}
           </select>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 flex-wrap">
           <button
             disabled={isBusy}
             onClick={handleRecompute}
@@ -414,6 +424,15 @@ function AIAnalysisSection() {
           >
             <RefreshCw size={13} className={isBusy ? "animate-spin" : ""} />
             {phase === "starting" ? "Iniciando…" : isBusy ? "Procesando…" : "Recalcular"}
+          </button>
+          <button
+            disabled={isBusy || !carrera}
+            onClick={handleTestRecompute}
+            title={!carrera ? "Selecciona una carrera específica" : undefined}
+            className="flex items-center gap-1.5 px-4 py-1.5 border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[12px] font-medium rounded-md hover:bg-[#DBEAFE] transition-colors disabled:opacity-50"
+          >
+            <FlaskConical size={13} />
+            Ejecutar prueba (5 conexiones)
           </button>
           {isBusy && (
             <button
@@ -426,6 +445,10 @@ function AIAnalysisSection() {
           )}
         </div>
       </div>
+
+      <p className="text-[11px] text-[#9CA3AF] mb-4">
+        La prueba genera hasta 5 conexiones RA→PE para la carrera seleccionada (~10–30 s) sin borrar propuestas existentes.
+      </p>
 
       {/* Panel de progreso */}
       {(isBusy || phase === "done" || phase === "error" || phase === "cancelled") && (
@@ -470,7 +493,13 @@ function AIAnalysisSection() {
               </p>
               {progress && progress.total_steps > 0 && (
                 <p className="text-[11px] text-[#6B7280]">
-                  {progress.phase === "conexiones" ? "Fase: Conexiones RA→PE" : progress.phase === "redundancia" ? "Fase: Redundancia" : `Fase: ${progress.phase}`}
+                  {progress.phase === "conexiones"
+                    ? "Fase: Conexiones RA→PE"
+                    : progress.phase === "conexiones_prueba"
+                      ? "Fase: Prueba de conexiones (5 máx.)"
+                      : progress.phase === "redundancia"
+                        ? "Fase: Redundancia"
+                        : `Fase: ${progress.phase}`}
                   {" · "}{progress.step}/{progress.total_steps} ({pct}%)
                   {progress.propuestas !== undefined && ` · ${progress.propuestas} propuestas`}
                   {progress.errores !== undefined && progress.errores > 0 && ` · ${progress.errores} errores`}
@@ -486,6 +515,9 @@ function AIAnalysisSection() {
             <div className="text-[#166534]">
               <p className="font-medium mb-1">Análisis finalizado correctamente.</p>
               <ul className="text-[11px] space-y-0.5 list-disc pl-4">
+                {"conexiones_prueba" in (job.stats as object) && (
+                  <li>Prueba: {(job.stats as { conexiones_prueba?: { propuestas?: number } }).conexiones_prueba?.propuestas ?? 0} propuestas generadas</li>
+                )}
                 {"conexiones" in (job.stats as object) && (
                   <li>Conexiones: {(job.stats as { conexiones?: { propuestas?: number } }).conexiones?.propuestas ?? 0} propuestas generadas</li>
                 )}
@@ -513,6 +545,9 @@ function AIAnalysisSection() {
       <div className="text-[11px] text-[#9CA3AF] space-y-0.5">
         {latest?.conexiones && (
           <p>Último análisis de conexiones: {fmtJobDate(latest.conexiones.finished_at)}</p>
+        )}
+        {latest?.conexiones_prueba && (
+          <p>Última prueba de conexiones: {fmtJobDate(latest.conexiones_prueba.finished_at)}</p>
         )}
         {latest?.redundancia && (
           <p>Último análisis de redundancia: {fmtJobDate(latest.redundancia.finished_at)}</p>

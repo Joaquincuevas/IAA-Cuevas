@@ -118,7 +118,7 @@ export default function RedundanciaPage() {
           <button
             key={c.code}
             onClick={() => setCarrera(c.code)}
-            className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
+            className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
               carrera === c.code
                 ? "bg-[#1B2A4A] text-white"
                 : "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
@@ -130,7 +130,7 @@ export default function RedundanciaPage() {
         <select
           value={fStatus}
           onChange={(e) => setFStatus(e.target.value)}
-          className="text-[12px] border border-[#E5E7EB] rounded-md px-2 py-1 text-[#374151]"
+          className="text-[13px] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#374151]"
         >
           <option>Todos</option>
           <option value="pending">Pendientes</option>
@@ -243,8 +243,18 @@ function PairCard({
       <div className="flex items-start justify-between gap-4">
         {/* Left: pair */}
         <div className="flex-1 grid grid-cols-2 gap-4">
-          <RABlock raId={p.ra_id_a} curso={p.curso_a} texto={p.ra_texto_a} />
-          <RABlock raId={p.ra_id_b} curso={p.curso_b} texto={p.ra_texto_b} />
+          <RABlock
+            raId={p.ra_id_a}
+            curso={p.curso_a}
+            cursoNombre={p.curso_nombre_a}
+            texto={p.ra_texto_a}
+          />
+          <RABlock
+            raId={p.ra_id_b}
+            curso={p.curso_b}
+            cursoNombre={p.curso_nombre_b}
+            texto={p.ra_texto_b}
+          />
         </div>
 
         {/* Right: meta + actions */}
@@ -287,7 +297,7 @@ function PairCard({
 
       {/* Razón IA */}
       {p.razon && (
-        <p className="mt-2 text-[11px] text-[#6B7280] italic border-t border-[#F3F4F6] pt-2">
+        <p className="mt-2 text-[11px] text-[#6B7280] italic border-t border-[#F3F4F6] pt-2 leading-relaxed whitespace-normal">
           IA: {p.razon}
         </p>
       )}
@@ -295,12 +305,25 @@ function PairCard({
   );
 }
 
-function RABlock({ raId, curso, texto }: { raId: string; curso: string; texto: string }) {
+function RABlock({
+  raId,
+  curso,
+  cursoNombre,
+  texto,
+}: {
+  raId: string;
+  curso: string;
+  cursoNombre?: string;
+  texto: string;
+}) {
   return (
     <div className="bg-[#F9FAFB] rounded-lg p-3">
-      <p className="text-[10px] font-semibold text-[#9CA3AF] mb-0.5">{curso}</p>
+      <p className="text-[12px] font-medium text-[#374151]">{curso}</p>
+      {cursoNombre && (
+        <p className="text-[11px] text-[#9CA3AF] leading-snug mt-0.5 mb-1">{cursoNombre}</p>
+      )}
       <p className="text-[11px] font-mono text-[#1B2A4A] mb-1">{raId}</p>
-      <p className="text-[12px] text-[#374151] leading-snug">{texto.slice(0, 140)}{texto.length > 140 ? "…" : ""}</p>
+      <p className="text-[12px] text-[#374151] leading-relaxed whitespace-normal">{texto}</p>
     </div>
   );
 }

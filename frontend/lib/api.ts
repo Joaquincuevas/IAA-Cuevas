@@ -36,7 +36,7 @@ export async function getStats() {
 export async function getMe() {
   return apiFetch<{
     email: string; name: string; role: string; last_login: string | null;
-    actividad: { chats: number; filtros: number };
+    actividad: { filtros: number };
   }>("/api/me");
 }
 
@@ -45,12 +45,6 @@ export async function changePassword(oldPassword: string, newPassword: string) {
     method: "POST",
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
-}
-
-export async function getChatHistory() {
-  return apiFetch<{ messages: { role: string; content: string; created_at: string }[] }>(
-    "/api/history/chat"
-  );
 }
 
 export async function saveFilterSnapshot(label: string, filters: Record<string, unknown>) {
@@ -121,9 +115,11 @@ export type AIRedundancyProposal = {
   ra_id_a: string;
   ra_texto_a: string;
   curso_a: string;
+  curso_nombre_a?: string;
   ra_id_b: string;
   ra_texto_b: string;
   curso_b: string;
+  curso_nombre_b?: string;
   similitud: number;
   razon: string;
   tipo: "semantica" | "curricular";
@@ -166,6 +162,9 @@ export async function getAIConexiones(params?: {
   status?: string;
   curso?: string;
   pe?: string;
+  confianza_min?: number;
+  confianza_max?: number;
+  sort?: "confianza_desc" | "confianza_asc" | "curso";
   limit?: number;
   offset?: number;
 }) {
@@ -174,8 +173,9 @@ export async function getAIConexiones(params?: {
   if (params?.status) q.set("status", params.status);
   if (params?.curso) q.set("curso", params.curso);
   if (params?.pe) q.set("pe", params.pe);
-  if (params?.limit !== undefined) q.set("limit", String(params.limit));
-  if (params?.offset !== undefined) q.set("offset", String(params.offset));
+  if (params?.confianza_min !== undefined) q.set("confianza_min", String(params.confianza_min));
+  if (params?.confianza_max !== undefined) q.set("confianza_max", String(params.confianza_max));
+  if (params?.sort) q.set("sort", params.sort);
   const qs = q.toString();
   return apiFetch<{ proposals: AIRaPeProposal[]; total: number; limit: number; offset: number }>(
     `/api/ai/conexiones${qs ? "?" + qs : ""}`
@@ -211,7 +211,10 @@ export async function castAIVote(
   });
 }
 
-export async function recomputeAI(jobType: "conexiones" | "redundancia" | "all", carrera?: string) {
+export async function recomputeAI(
+  jobType: "conexiones" | "conexiones_prueba" | "redundancia" | "all",
+  carrera?: string
+) {
   return apiFetch<{ job_id: number; status: string; message: string; already_running?: boolean }>(
     "/api/ai/recompute",
     { method: "POST", body: JSON.stringify({ job_type: jobType, carrera }) }
@@ -238,9 +241,12 @@ export async function clearAllAIResults() {
 }
 
 export async function getAILatestJobs() {
-  return apiFetch<{ conexiones: AIJob | null; redundancia: AIJob | null; running: AIJob[] }>(
-    "/api/ai/jobs/latest"
-  );
+  return apiFetch<{
+    conexiones: AIJob | null;
+    conexiones_prueba: AIJob | null;
+    redundancia: AIJob | null;
+    running: AIJob[];
+  }>("/api/ai/jobs/latest");
 }
 
 export async function getAIStats(carrera?: string) {
@@ -251,13 +257,6 @@ export async function getAIStats(carrera?: string) {
 export async function exportAIConexiones(carrera?: string) {
   const q = carrera ? `?carrera=${carrera}` : "";
   return apiFetch<{ conexiones: AIRaPeProposal[]; total: number }>(`/api/ai/export/conexiones${q}`);
-}
-
-export async function taulaChat(message: string, history: { role: string; content: string }[]) {
-  return apiFetch<{ reply: string }>("/api/taula/chat", {
-    method: "POST",
-    body: JSON.stringify({ message, history }),
-  });
 }
 
 export type HeatmapData = {

@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -15,7 +15,7 @@ import os
 import threading
 from collections import defaultdict
 from dotenv import load_dotenv
-from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre, generar_resumen_tributacion
+from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre
 import auth_db
 import ai_db
 import ai_engine
@@ -191,11 +191,6 @@ def get_me(email: str = Depends(verify_token)):
         **auth_db.public_user(user),
         "actividad": auth_db.activity_summary(email),
     }
-
-
-@app.get("/api/history/chat")
-def get_chat_history(email: str = Depends(verify_token)):
-    return {"messages": auth_db.recent_chats(email)}
 
 
 class FilterSnapshotRequest(BaseModel):
@@ -453,130 +448,6 @@ def get_objectives(email: str = Depends(verify_token)):
     return JSONResponse(content=jsonable_encoder({"objectives": rows}))
 
 
-# ── Taula ──────────────────────────────────────────────────────────────────────
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    message: str
-    history: List[ChatMessage] = []
-
-
-def _compact_ra_summary(df_objectives: pd.DataFrame, df_ra_links: pd.DataFrame) -> str:
-    """One line per course: CURSO (NOMBRE): RA1:A, RA2:M, RA3:B (A=Alta M=Media B=Baja)."""
-    imp_order = {"Alta": 3, "Media": 2, "Baja": 1}
-    if df_ra_links.empty:
-        return ""
-    max_imp = (
-        df_ra_links.groupby("ID_Objetivo")["Importancia"]
-        .apply(lambda x: max(x, key=lambda v: imp_order.get(v, 0)))
-        .reset_index()
-    )
-    max_imp.columns = ["ID_Objetivo", "MaxImp"]
-    merged = df_objectives[["ID", "ID_Objetivo", "Nombre"]].merge(max_imp, on="ID_Objetivo", how="left")
-    merged["MaxImp"] = merged["MaxImp"].fillna("Baja")
-    lines = []
-    for curso_id, grp in merged.groupby("ID"):
-        nombre = grp["Nombre"].iloc[0][:22]
-        ras = ", ".join(
-            f"{row['ID_Objetivo'].split('-')[-1]}:{row['MaxImp'][0]}"
-            for _, row in grp.iterrows()
-        )
-        lines.append(f"{curso_id} ({nombre}): {ras}")
-    return "\n".join(lines)
-
-
-def build_taula_system_prompt(
-    resumen_matrices: str,
-    ra_summary: str,
-    stats: dict,
-) -> str:
-    return f"""Eres Taula, el asistente de inteligencia curricular de la Facultad de Ingeniería de la Universidad de los Andes.
-
-## Programas
-IOC (Obras Civiles), ICI (Civil), ING (Industrial), ICE (Eléctrica), ICC (Computación), ICA (Ambiental).
-
-## Estadísticas
-{stats.get('n_cursos', 139)} cursos · {stats.get('n_objetivos', 672)} RAs · {stats.get('n_links', 925)} vínculos RA↔prerrequisito
-
-## Importancia de los RAs en RA_Links
-Alta = dominio pleno · Media = en desarrollo · Baja = introducción
-
-## Cobertura real por carrera (PE cubiertos)
-- ICA (Ambiental): 18/23 PEs con tributación directa
-- ICC (Computación): 15/19 PEs
-- ICE (Eléctrica): 17/21 PEs
-- IOC (Obras Civiles): 22/29 PEs
-- ICI (Civil): 17/21 PEs
-
-## Reglas de análisis
-- Cobertura PE: porcentaje de semestres con al menos 1 curso tributando al PE.
-- Conexiones RA→PE: propuestas generadas por IA que deben ser validadas por usuarios.
-- Redundancia: pares de objetivos semánticamente similares detectados por IA.
-- Responde siempre en español, código de curso exacto (ej: ICA3102), conciso.
-
-## Matrices de Tributación (curso → PEs que cubre)
-{resumen_matrices if resumen_matrices else "No disponible."}
-
-## RAs por curso (número:nivel)
-{ra_summary if ra_summary else "No disponible."}
-"""
-
-
-@app.post("/api/taula/chat")
-def chat(req: ChatRequest, email: str = Depends(verify_token)):
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
-
-    data = get_data()
-    resumen_tributacion = ""
-    if _matrices_cache is not None:
-        resumen_tributacion = generar_resumen_tributacion(_matrices_cache["tributacion"])
-
-    ra_summary = _compact_ra_summary(data["objectives"], data["ra_links"])
-    stats = {
-        "n_cursos": len(data["general"]),
-        "n_objetivos": len(data["objectives"]),
-        "n_links": len(data["ra_links"]),
-    }
-    system_prompt = build_taula_system_prompt(
-        resumen_matrices=resumen_tributacion,
-        ra_summary=ra_summary,
-        stats=stats,
-    )
-
-    try:
-        from groq import Groq
-
-        client = Groq(api_key=api_key)
-
-        # Keep last 4 messages of history to stay within TPM limits
-        trimmed_history = req.history[-4:] if len(req.history) > 4 else req.history
-        messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        for msg in trimmed_history:
-            messages.append({"role": msg.role, "content": msg.content})
-        messages.append({"role": "user", "content": req.message})
-
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=0.3,
-            max_tokens=1024,
-        )
-        reply = completion.choices[0].message.content
-        # Persistir la conversación por usuario (historial)
-        try:
-            auth_db.add_chat(email, "user", req.message)
-            auth_db.add_chat(email, "assistant", reply or "")
-        except Exception:
-            pass
-        return {"reply": reply}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
 # ── Dashboard summary ──────────────────────────────────────────────────────────
 @app.get("/api/dashboard/summary")
 def get_dashboard_summary(email: str = Depends(verify_token)):
@@ -642,7 +513,7 @@ def get_dashboard_summary(email: str = Depends(verify_token)):
 # ── AI Módulo: conexiones RA→PE y redundancia semántica ──────────────────────
 
 class RecomputeRequest(BaseModel):
-    job_type: str = "all"     # 'conexiones' | 'redundancia' | 'all'
+    job_type: str = "all"     # 'conexiones' | 'conexiones_prueba' | 'redundancia' | 'all'
     carrera: Optional[str] = None
 
 
@@ -656,10 +527,15 @@ class VoteRequest(BaseModel):
 @app.post("/api/ai/recompute")
 def recompute_ai(req: RecomputeRequest, email: str = Depends(verify_token)):
     """Inicia un job batch de análisis IA en background thread."""
-    if req.job_type not in ("conexiones", "redundancia", "all"):
-        raise HTTPException(status_code=400, detail="job_type debe ser 'conexiones', 'redundancia' o 'all'")
+    if req.job_type not in ("conexiones", "conexiones_prueba", "redundancia", "all"):
+        raise HTTPException(
+            status_code=400,
+            detail="job_type debe ser 'conexiones', 'conexiones_prueba', 'redundancia' o 'all'",
+        )
 
     carrera = req.carrera.upper().strip() if req.carrera else None
+    if req.job_type == "conexiones_prueba" and not carrera:
+        raise HTTPException(status_code=400, detail="El modo prueba requiere seleccionar una carrera")
     if carrera and carrera not in CARRERAS_MATRICES:
         raise HTTPException(status_code=400, detail=f"Carrera inválida. Opciones: {CARRERAS_MATRICES}")
 
@@ -705,6 +581,7 @@ def get_latest_jobs(email: str = Depends(verify_token)):
     """Último job completado por tipo."""
     return {
         "conexiones": ai_db.get_latest_job("conexiones") or ai_db.get_latest_job("all"),
+        "conexiones_prueba": ai_db.get_latest_job("conexiones_prueba"),
         "redundancia": ai_db.get_latest_job("redundancia") or ai_db.get_latest_job("all"),
         "running": ai_db.get_running_jobs(),
     }
@@ -742,22 +619,36 @@ def get_ai_conexiones(
     status: Optional[str] = None,
     curso: Optional[str] = None,
     pe: Optional[str] = None,
+    confianza_min: Optional[float] = None,
+    confianza_max: Optional[float] = None,
+    sort: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
     email: str = Depends(verify_token),
 ):
     """Lista paginada de propuestas RA→PE con filtros."""
+    if sort and sort not in ("confianza_desc", "confianza_asc", "curso"):
+        raise HTTPException(status_code=400, detail="sort debe ser confianza_desc, confianza_asc o curso")
+    if confianza_min is not None and confianza_max is not None and confianza_min > confianza_max:
+        raise HTTPException(status_code=400, detail="confianza_min no puede ser mayor que confianza_max")
+
+    carrera_u = carrera.upper() if carrera else None
     proposals = ai_db.get_ra_pe_proposals(
-        carrera=carrera.upper() if carrera else None,
+        carrera=carrera_u,
         status=status,
         curso=curso,
         pe=pe,
+        confianza_min=confianza_min,
+        confianza_max=confianza_max,
+        sort=sort,
         limit=limit,
         offset=offset,
     )
     total = ai_db.count_ra_pe_proposals(
-        carrera=carrera.upper() if carrera else None,
+        carrera=carrera_u,
         status=status,
+        confianza_min=confianza_min,
+        confianza_max=confianza_max,
     )
     return JSONResponse(content=jsonable_encoder({
         "proposals": proposals,
@@ -765,6 +656,21 @@ def get_ai_conexiones(
         "limit": limit,
         "offset": offset,
     }))
+
+
+def _course_name_map() -> dict[str, str]:
+    general = get_data()["general"]
+    return dict(zip(general["ID"].astype(str).str.strip(), general["Nombre"].astype(str).str.strip()))
+
+
+def _enrich_redundancy_proposals(proposals: list[dict]) -> list[dict]:
+    names = _course_name_map()
+    for p in proposals:
+        ca = str(p.get("curso_a", "")).strip()
+        cb = str(p.get("curso_b", "")).strip()
+        p["curso_nombre_a"] = names.get(ca, "")
+        p["curso_nombre_b"] = names.get(cb, "")
+    return proposals
 
 
 @app.get("/api/ai/redundancia")
@@ -782,6 +688,7 @@ def get_ai_redundancia(
         limit=limit,
         offset=offset,
     )
+    proposals = _enrich_redundancy_proposals(proposals)
     return JSONResponse(content=jsonable_encoder({
         "proposals": proposals,
         "total": len(proposals),

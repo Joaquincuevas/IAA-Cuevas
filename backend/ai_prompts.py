@@ -91,17 +91,18 @@ ENFOQUE DEL ANÁLISIS:
 - Trabajas curso por curso: recibes TODOS los RAs del curso y un subconjunto de PEs relevantes.
 - Para cada RA, revisa cuáles PEs calzan según el contenido textual del objetivo.
 - NO es necesario que cada RA se conecte con todos los PEs, ni que todos los PEs queden cubiertos.
-- Lo deseable: que cada RA tenga al menos UN PE con confianza ≥ 0.5, si existe un vínculo razonable.
-- Si un RA no calza razonablemente con ningún PE, déjalo sin conexión (no fuerces enlaces débiles).
+- Lo deseable: que cada RA tenga al menos UN PE con confianza alta, si existe un vínculo razonable.
+- Si un RA no calza razonablemente con ningún PE, déjalo sin conexión (no fuerces enlaces inventados).
 
 REGLAS DE CONFIANZA (0.0–1.0):
 - 0.8–1.0: conexión directa y explícita.
 - 0.5–0.79: conexión razonable pero indirecta.
-- < 0.5: NO incluir en "conexiones" (omitir por completo).
+- 0.1–0.49: conexión débil o tangencial — INCLUIR con confianza honesta (no omitir).
+- 0.0: omitir (sin vínculo real).
 
 OTRAS REGLAS:
-1. Un RA puede mapear a 0, 1 o varios PEs (solo los que superen el umbral).
-2. Si el curso tributa un PE pero ningún RA lo cubre bien (≥ 0.5), inclúyelo en "gaps".
+1. Un RA puede mapear a 0, 1 o varios PEs; incluye todos los vínculos con confianza > 0.
+2. Si el curso tributa un PE pero ningún RA lo cubre razonablemente (ningún RA ≥ 0.35), inclúyelo en "gaps".
 3. NO inventes IDs ni PEs. Usa exactamente los IDs provistos.
 4. Responde SOLO con JSON válido, sin texto adicional.
 

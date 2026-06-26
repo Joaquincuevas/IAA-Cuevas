@@ -5,8 +5,7 @@ Diseño orientado a producción:
 - Almacenamiento en SQLite (backend/app.db), no en memoria ni en código.
 - Contraseñas hasheadas con PBKDF2-HMAC-SHA256 + sal por usuario (librería estándar,
   sin dependencias frágiles). Nunca se guarda ni se devuelve la contraseña en claro.
-- Historial por usuario: conversaciones con la IA (Taula) y snapshots de filtros del
-  Explorador, para retomar la última sesión.
+- Historial por usuario: snapshots de filtros del Explorador.
 
 Los 4 usuarios (2 desarrolladores + 2 cliente) se siembran al iniciar si no existen.
 Para actualizar el correo real de los clientes cuando se conozca, usar `manage.py`.
@@ -76,13 +75,6 @@ def init_db() -> None:
             last_login TEXT,
             created_at TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS chat_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
         CREATE TABLE IF NOT EXISTS filter_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
@@ -90,7 +82,6 @@ def init_db() -> None:
             filters_json TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_chat_email ON chat_messages(email, id DESC);
         CREATE INDEX IF NOT EXISTS idx_filter_email ON filter_snapshots(email, id DESC);
         """
     )
@@ -144,27 +135,6 @@ def change_password(email: str, old: str, new: str) -> tuple[bool, str]:
     return True, "Contraseña actualizada correctamente."
 
 
-# ── Historial: chat con la IA ────────────────────────────────────────────────
-def add_chat(email: str, role: str, content: str) -> None:
-    conn = _conn()
-    conn.execute(
-        "INSERT INTO chat_messages (email, role, content, created_at) VALUES (?,?,?,?)",
-        (_norm(email), role, content, datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
-
-
-def recent_chats(email: str, limit: int = 30) -> list[dict]:
-    conn = _conn()
-    rows = conn.execute(
-        "SELECT role, content, created_at FROM chat_messages WHERE email = ? ORDER BY id DESC LIMIT ?",
-        (_norm(email), limit),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in reversed(rows)]
-
-
 # ── Historial: filtros del Explorador ────────────────────────────────────────
 def add_filter_snapshot(email: str, label: str, filters: dict) -> None:
     conn = _conn()
@@ -196,7 +166,6 @@ def recent_filters(email: str, limit: int = 10) -> list[dict]:
 
 def activity_summary(email: str) -> dict:
     conn = _conn()
-    n_chats = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE email = ?", (_norm(email),)).fetchone()[0]
     n_filters = conn.execute("SELECT COUNT(*) FROM filter_snapshots WHERE email = ?", (_norm(email),)).fetchone()[0]
     conn.close()
-    return {"chats": n_chats, "filtros": n_filters}
+    return {"filtros": n_filters}

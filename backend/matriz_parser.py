@@ -245,26 +245,6 @@ def calcular_cobertura_por_semestre(
     return pd.DataFrame(rows)
 
 
-def generar_resumen_tributacion(df_tributacion: pd.DataFrame) -> str:
-    """Generate a compact text summary for the Taula system prompt."""
-    if df_tributacion.empty:
-        return "No hay datos de tributación disponibles."
-
-    lines: list[str] = []
-    for carrera in sorted(df_tributacion["carrera"].unique()):
-        df_c = df_tributacion[df_tributacion["carrera"] == carrera]
-        lines.append(f"Carrera {carrera}:")
-        for codigo in sorted(df_c["codigo_curso"].unique()):
-            df_curso = df_c[df_c["codigo_curso"] == codigo]
-            nombre = df_curso["nombre_curso"].iloc[0]
-            comp_ids = sorted(df_curso["competencia_id"].unique().tolist())
-            sem = int(df_curso["semestre"].iloc[0])
-            lines.append(
-                f"  S{sem} {codigo} ({nombre[:40]}): PE [{','.join(str(c) for c in comp_ids)}]"
-            )
-    return "\n".join(lines)
-
-
 if __name__ == "__main__":
     data_folder = Path(__file__).parent.parent / "data"
     print("Parseando matrices de tributación...\n")

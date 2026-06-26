@@ -48,7 +48,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md px-6">
           <div className="text-center mb-8">
             <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Trace Analytics</h1>
-            <p className="text-[12px] text-[#9CA3AF] mt-1">powered by Taula</p>
+            <p className="text-[12px] text-[#9CA3AF] mt-1">Facultad de Ingeniería · U. de los Andes</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">

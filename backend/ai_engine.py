@@ -32,7 +32,7 @@ import pandas as pd
 import ai_db
 import ai_prompts
 
-MIN_CONFIANZA = 0.5  # Propuestas bajo este umbral no se persisten
+TEST_CONEXIONES_LIMIT = 5
 
 # Workers Groq en paralelo (free tier: 2 recomendado por límite TPM 6K/min)
 GROQ_MAX_WORKERS = max(1, min(int(os.environ.get("GROQ_MAX_WORKERS", "2")), 4))
@@ -371,7 +371,7 @@ def _process_conexion_course(
     for conn_item in response.conexiones:
         if conn_item.pe_id not in valid_pe_ids:
             continue
-        if conn_item.confianza < MIN_CONFIANZA:
+        if conn_item.confianza <= 0:
             continue
         pe_texto = pe_text_map.get(carrera, {}).get(conn_item.pe_id, conn_item.pe_id)
         ra_match = next((r for r in ras if r["id"] == conn_item.ra_id), None)
@@ -565,6 +565,110 @@ def run_conexiones(
     return stats
 
 
+def run_conexiones_prueba(
+    job_id: int,
+    data: dict,
+    matrices: dict,
+    groq_key: str,
+    carrera: str,
+) -> dict:
+    """
+    Modo prueba: genera hasta TEST_CONEXIONES_LIMIT propuestas RA→PE para una carrera.
+    No borra propuestas existentes.
+    """
+    df_obj: pd.DataFrame = data["objectives"]
+    df_comp: pd.DataFrame = matrices["competencias"]
+
+    pe_text_map: dict[str, dict[str, str]] = {}
+    for _, row in df_comp.iterrows():
+        car = str(row["carrera"]).strip()
+        pe_label = f"PE{int(row['competencia_id'])}"
+        pe_text_map.setdefault(car, {})[pe_label] = str(row["competencia_texto"]).strip()
+
+    stats = {
+        "modo": "prueba",
+        "limite": TEST_CONEXIONES_LIMIT,
+        "cursos_procesados": 0,
+        "propuestas": 0,
+        "errores": 0,
+        "gaps": 0,
+    }
+    all_proposals: list[dict] = []
+
+    work_items = _conexiones_work_items(data, matrices, carrera)
+    total = len(work_items)
+    if total == 0:
+        _progress(
+            job_id,
+            phase="conexiones_prueba",
+            step=0,
+            total=1,
+            message=f"Sin cursos con PEs en la matriz para {carrera}",
+        )
+        return stats
+
+    _progress(
+        job_id,
+        phase="conexiones_prueba",
+        step=0,
+        total=total,
+        message=f"Prueba: generando hasta {TEST_CONEXIONES_LIMIT} conexiones para {carrera}…",
+        extra={"propuestas": 0, "errores": 0},
+    )
+
+    for step, (car, curso_norm, curso_id_underscore, ras, pe_ids) in enumerate(work_items, start=1):
+        if ai_db.is_job_cancelled(job_id):
+            break
+        if len(all_proposals) >= TEST_CONEXIONES_LIMIT:
+            break
+
+        result = _process_conexion_course(
+            groq_key,
+            df_obj,
+            pe_text_map,
+            car,
+            curso_norm,
+            curso_id_underscore,
+            ras,
+            pe_ids,
+        )
+        stats["gaps"] += result.gaps
+        if result.error:
+            stats["errores"] += 1
+        else:
+            stats["cursos_procesados"] += 1
+
+        remaining = TEST_CONEXIONES_LIMIT - len(all_proposals)
+        all_proposals.extend(result.proposals[:remaining])
+
+        _progress(
+            job_id,
+            phase="conexiones_prueba",
+            step=step,
+            total=total,
+            message=f"[{car}] {curso_id_underscore} — {len(all_proposals)}/{TEST_CONEXIONES_LIMIT} propuestas",
+            extra={
+                "propuestas": len(all_proposals),
+                "errores": stats["errores"],
+                "curso": curso_id_underscore,
+            },
+        )
+
+    if all_proposals:
+        stats["propuestas"] = ai_db.bulk_insert_ra_pe(job_id, all_proposals)
+
+    _progress(
+        job_id,
+        phase="conexiones_prueba",
+        step=total,
+        total=total,
+        message=f"Prueba completada: {stats['propuestas']} propuestas generadas",
+        extra={"propuestas": stats["propuestas"], "errores": stats["errores"]},
+    )
+
+    return stats
+
+
 # ── Pipeline 2: Redundancia semántica ────────────────────────────────────────
 def run_redundancia(
     job_id: int,
@@ -727,7 +831,16 @@ def run_job(
     try:
         stats: dict[str, Any] = {}
 
-        if job_type in ("conexiones", "all"):
+        if job_type == "conexiones_prueba":
+            if not carrera:
+                raise ValueError("El modo prueba requiere una carrera")
+            _progress(job_id, phase="conexiones_prueba", step=0, total=1, message="Preparando prueba de conexiones…")
+            s = run_conexiones_prueba(job_id, data, matrices, groq_key, carrera)
+            stats["conexiones_prueba"] = s
+            if ai_db.is_job_cancelled(job_id):
+                ai_db.update_cancelled_stats(job_id, stats)
+                return
+        elif job_type in ("conexiones", "all"):
             _progress(job_id, phase="conexiones", step=0, total=1, message="Preparando análisis de conexiones…")
             s = run_conexiones(job_id, data, matrices, groq_key, carrera)
             stats["conexiones"] = s

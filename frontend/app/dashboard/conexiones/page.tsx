@@ -28,8 +28,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const CONF_COLOR = (c: number) => {
   if (c >= 0.75) return "#10B981";
   if (c >= 0.5)  return "#F59E0B";
+  if (c >= 0.3)  return "#EF4444";
   return "#9CA3AF";
 };
+
+const CONF_TOOLTIP = (c: number) => {
+  if (c >= 0.8) return "Conexión directa y explícita";
+  if (c >= 0.5) return "Conexión razonable pero indirecta";
+  if (c >= 0.3) return "Conexión débil o tangencial";
+  return "Conexión muy débil";
+};
+
+type SortOption = "confianza_desc" | "confianza_asc";
 
 const PAGE_SIZE = 100;
 
@@ -46,19 +56,26 @@ export default function ConexionesPage() {
   const [fPE,     setFPE]     = useState("");
   const [fCurso,  setFCurso]  = useState("");
   const [fRA,     setFRA]     = useState("");
+  const [fSort,   setFSort]   = useState<SortOption>("confianza_desc");
 
   // vote modal
   const [voting, setVoting]       = useState<{ id: number; voto: "approve" | "reject" } | null>(null);
   const [comentario, setComentario] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchData = useCallback(async (car: string, off: number, status: string) => {
+  const fetchData = useCallback(async (
+    car: string,
+    off: number,
+    status: string,
+    sort: SortOption,
+  ) => {
     setLoading(true);
     try {
       const [data, st] = await Promise.all([
         getAIConexiones({
           carrera: car,
           status: status !== "Todos" ? status : undefined,
+          sort,
           limit: PAGE_SIZE,
           offset: off,
         }),
@@ -76,8 +93,8 @@ export default function ConexionesPage() {
 
   useEffect(() => {
     setOffset(0);
-    fetchData(carrera, 0, fStatus);
-  }, [carrera, fStatus, fetchData]);
+    fetchData(carrera, 0, fStatus, fSort);
+  }, [carrera, fStatus, fSort, fetchData]);
 
   const filtered = useMemo(() => {
     return proposals.filter((p) => {
@@ -191,6 +208,15 @@ export default function ConexionesPage() {
         <FilterInput value={fCurso} onChange={setFCurso} placeholder="Curso…" />
         {/* RA text filter */}
         <FilterInput value={fRA} onChange={setFRA} placeholder="Buscar en RA…" wide />
+
+        <select
+          value={fSort}
+          onChange={(e) => setFSort(e.target.value as SortOption)}
+          className="text-[13px] border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-[#374151]"
+        >
+          <option value="confianza_desc">Confianza: mayor a menor</option>
+          <option value="confianza_asc">Confianza: menor a mayor</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -216,11 +242,11 @@ export default function ConexionesPage() {
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[28%]">Objetivo (RA)</th>
                 <th
                   className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold whitespace-nowrap"
-                  title="Qué tan clara es la conexión RA→PE según la IA (solo se guardan ≥50%). ≥80% directa; 50–79% razonable."
+                  title="Qué tan clara es la conexión RA→PE según la IA (0–100%)."
                 >
                   Confianza
                 </th>
-                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold w-[16%]">Razón IA</th>
+                <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold min-w-[180px]">Razón IA</th>
                 <th className="text-left px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Estado</th>
                 <th className="px-3 py-2 text-[11px] text-[#6B7280] font-semibold">Votar</th>
               </tr>
@@ -243,16 +269,12 @@ export default function ConexionesPage() {
                     <span
                       style={{ color: CONF_COLOR(p.confianza) }}
                       className="font-semibold"
-                      title={
-                        p.confianza >= 0.8
-                          ? "Conexión directa y explícita"
-                          : "Conexión razonable pero indirecta"
-                      }
+                      title={CONF_TOOLTIP(p.confianza)}
                     >
                       {(p.confianza * 100).toFixed(0)}%
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-[#6B7280] leading-snug">{p.razon.slice(0, 80)}{p.razon.length > 80 ? "…" : ""}</td>
+                  <td className="px-3 py-2 text-[#6B7280] leading-relaxed align-top whitespace-normal">{p.razon}</td>
                   <td className="px-3 py-2">
                     <span
                       className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
@@ -296,7 +318,7 @@ export default function ConexionesPage() {
           <div className="flex gap-2">
             <button
               disabled={offset === 0}
-              onClick={() => { const o = Math.max(0, offset - PAGE_SIZE); setOffset(o); fetchData(carrera, o, fStatus); }}
+              onClick={() => { const o = Math.max(0, offset - PAGE_SIZE); setOffset(o); fetchData(carrera, o, fStatus, fSort); }}
               className="px-3 py-1 border border-[#E5E7EB] rounded-md hover:bg-[#F9FAFB] disabled:opacity-40"
             >
               Anterior
@@ -306,7 +328,7 @@ export default function ConexionesPage() {
             </span>
             <button
               disabled={offset + PAGE_SIZE >= total}
-              onClick={() => { const o = offset + PAGE_SIZE; setOffset(o); fetchData(carrera, o, fStatus); }}
+              onClick={() => { const o = offset + PAGE_SIZE; setOffset(o); fetchData(carrera, o, fStatus, fSort); }}
               className="px-3 py-1 border border-[#E5E7EB] rounded-md hover:bg-[#F9FAFB] disabled:opacity-40"
             >
               Siguiente
