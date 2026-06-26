@@ -27,7 +27,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const TIPO_LABEL: Record<string, string> = {
   semantica:   "Semántica",
   curricular:  "Curricular",
+  exacta:      "Duplicado exacto",
 };
+
+function voteModalTitle(voto: "approve" | "reject", currentStatus: string): string {
+  if (currentStatus === "pending") {
+    return voto === "approve" ? "Confirmar redundancia" : "Descartar (son complementarios)";
+  }
+  if (voto === "approve") {
+    return currentStatus === "rejected" ? "Cambiar a redundante" : "Confirmar redundancia";
+  }
+  return currentStatus === "approved" ? "Cambiar a complementario" : "Descartar como complementario";
+}
 
 const PAGE_SIZE = 80;
 
@@ -40,7 +51,7 @@ export default function RedundanciaPage() {
   const [offset,    setOffset]    = useState(0);
   const [total,     setTotal]     = useState(0);
 
-  const [voting,     setVoting]     = useState<{ id: number; voto: "approve" | "reject" } | null>(null);
+  const [voting,     setVoting]     = useState<{ id: number; voto: "approve" | "reject"; currentStatus: string } | null>(null);
   const [comentario, setComentario] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -146,7 +157,7 @@ export default function RedundanciaPage() {
         <div className="border border-[#E5E7EB] rounded-xl p-8 text-center">
           <p className="text-[13px] text-[#6B7280]">
             {stats?.redundancia.total === 0
-              ? "No hay pares detectados. Ve a Configuración → Análisis IA y ejecuta \"Recalcular\"."
+              ? "No hay pares detectados. Ve a Análisis IA y ejecuta \"Recalcular\"."
               : "No se encontraron pares con esos filtros."}
           </p>
         </div>
@@ -156,7 +167,7 @@ export default function RedundanciaPage() {
             <PairCard
               key={p.id}
               proposal={p}
-              onVote={(voto) => { setVoting({ id: p.id, voto }); setComentario(""); }}
+              onVote={(voto) => { setVoting({ id: p.id, voto, currentStatus: p.status }); setComentario(""); }}
             />
           ))}
         </div>
@@ -188,7 +199,7 @@ export default function RedundanciaPage() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-[420px]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[15px] font-bold text-[#111827]">
-                {voting.voto === "approve" ? "Confirmar redundancia" : "Descartar (son complementarios)"}
+                {voteModalTitle(voting.voto, voting.currentStatus)}
               </h3>
               <button onClick={() => setVoting(null)} className="text-[#9CA3AF] hover:text-[#374151]">
                 <X size={16} />
@@ -237,9 +248,12 @@ function PairCard({
 }) {
   const status = STATUS_LABELS[p.status] ?? { label: p.status, color: "#6B7280" };
   const simPct = Math.round(p.similitud * 100);
+  const mismoCurso = p.curso_a.trim() === p.curso_b.trim();
 
   return (
-    <div className="border border-[#E5E7EB] rounded-xl p-4 hover:border-[#1B2A4A]/20 transition-colors">
+    <div className={`border rounded-xl p-4 hover:border-[#1B2A4A]/20 transition-colors ${
+      p.tipo === "exacta" ? "border-[#10B981]/40 bg-[#F0FDF4]/30" : "border-[#E5E7EB]"
+    }`}>
       <div className="flex items-start justify-between gap-4">
         {/* Left: pair */}
         <div className="flex-1 grid grid-cols-2 gap-4">
@@ -259,39 +273,49 @@ function PairCard({
 
         {/* Right: meta + actions */}
         <div className="flex flex-col items-end gap-2 min-w-[130px]">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 justify-end">
             <span
               className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
               style={{ color: status.color, background: status.color + "18" }}
             >
               {status.label}
             </span>
-            <span className="text-[11px] text-[#6B7280]">
-              {TIPO_LABEL[p.tipo] ?? p.tipo}
-            </span>
+            {p.tipo === "exacta" && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-[#059669] bg-[#D1FAE5]">
+                Duplicado exacto
+              </span>
+            )}
+            {mismoCurso && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-[#7C3AED] bg-[#EDE9FE]">
+                Mismo curso
+              </span>
+            )}
+            {p.tipo !== "exacta" && (
+              <span className="text-[11px] text-[#6B7280]">
+                {TIPO_LABEL[p.tipo] ?? p.tipo}
+              </span>
+            )}
           </div>
           <div className="text-right">
             <p className="text-[11px] text-[#6B7280]">Similitud</p>
             <p className="text-[20px] font-bold text-[#1B2A4A] leading-tight">{simPct}%</p>
           </div>
-          {p.status === "pending" && (
-            <div className="flex gap-1">
-              <button
-                title="Confirmar redundancia"
-                onClick={() => onVote("approve")}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[#EF4444] bg-[#FEF2F2] hover:bg-[#FEE2E2] transition-colors"
-              >
-                <ThumbsUp size={11} /> Redundante
-              </button>
-              <button
-                title="Descartar como complementario"
-                onClick={() => onVote("reject")}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[#10B981] bg-[#ECFDF5] hover:bg-[#D1FAE5] transition-colors"
-              >
-                <ThumbsDown size={11} /> No
-              </button>
-            </div>
-          )}
+          <div className="flex gap-1">
+            <button
+              title="Confirmar redundancia"
+              onClick={() => onVote("approve")}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[#EF4444] bg-[#FEF2F2] hover:bg-[#FEE2E2] transition-colors"
+            >
+              <ThumbsUp size={11} /> Redundante
+            </button>
+            <button
+              title="Descartar como complementario"
+              onClick={() => onVote("reject")}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[#10B981] bg-[#ECFDF5] hover:bg-[#D1FAE5] transition-colors"
+            >
+              <ThumbsDown size={11} /> No
+            </button>
+          </div>
         </div>
       </div>
 

@@ -575,11 +575,12 @@ def cast_vote(email: str, target_type: str, target_id: int, voto: str, comentari
     ).fetchall()
     tally = {r["voto"]: r["n"] for r in counts}
     new_status = _status_from_vote_tally(conn, target_type, target_id, tally)
+    if not new_status:
+        new_status = "approved" if voto == "approve" else "rejected"
 
     table = "ai_ra_pe_proposals" if target_type == "ra_pe" else "ai_redundancy_proposals"
-    if new_status:
-        conn.execute(f"UPDATE {table} SET status=? WHERE id=?", (new_status, target_id))
-        conn.commit()
+    conn.execute(f"UPDATE {table} SET status=? WHERE id=?", (new_status, target_id))
+    conn.commit()
 
     row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (target_id,)).fetchone()
     conn.close()
@@ -647,8 +648,9 @@ def get_ai_stats(carrera: str | None = None) -> dict:
 
 
 # ── Export ────────────────────────────────────────────────────────────────────
-def get_approved_ra_pe(carrera: str | None = None) -> list[dict]:
-    return get_ra_pe_proposals(carrera=carrera, status="approved", limit=10000)
+def get_all_ra_pe_for_export(carrera: str | None = None) -> list[dict]:
+    """Todas las propuestas RA→PE (cualquier status) para export CSV."""
+    return get_ra_pe_proposals(carrera=carrera, limit=10000)
 
 
 def clear_all_ai_results() -> dict[str, int]:

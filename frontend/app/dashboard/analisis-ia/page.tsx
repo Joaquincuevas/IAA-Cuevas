@@ -397,7 +397,19 @@ export default function AnalisisIAPage() {
                     <li>Conexiones: {(job.stats as { conexiones?: { propuestas?: number } }).conexiones?.propuestas ?? 0} propuestas generadas</li>
                   )}
                   {"redundancia" in (job.stats as object) && (
-                    <li>Redundancia: {(job.stats as { redundancia?: { propuestas?: number } }).redundancia?.propuestas ?? 0} pares detectados</li>
+                    <>
+                      <li>
+                        Redundancia:{" "}
+                        {(job.stats as { redundancia?: { propuestas?: number; exactas?: number } }).redundancia?.propuestas ?? 0}{" "}
+                        pares detectados
+                      </li>
+                      {((job.stats as { redundancia?: { exactas?: number } }).redundancia?.exactas ?? 0) > 0 && (
+                        <li>
+                          Duplicados exactos (sin IA):{" "}
+                          {(job.stats as { redundancia?: { exactas?: number } }).redundancia?.exactas ?? 0}
+                        </li>
+                      )}
+                    </>
                   )}
                 </ul>
               </div>

@@ -48,8 +48,16 @@ class ConexionesResponse(BaseModel):
 class ParRedundante(BaseModel):
     ra_id_a: str
     ra_id_b: str
-    tipo: str = "semantica"   # 'semantica' | 'curricular'
+    tipo: str = "semantica"   # 'semantica' | 'curricular' | 'exacta'
     razon: str
+
+    @field_validator("tipo")
+    @classmethod
+    def normalize_tipo(cls, v: str) -> str:
+        v = (v or "semantica").strip().lower()
+        if v not in ("semantica", "curricular", "exacta"):
+            return "semantica"
+        return v
 
 
 class RedundanciaResponse(BaseModel):
@@ -127,12 +135,15 @@ Responde con este formato JSON exacto:
 
 def build_redundancia_prompt(
     carrera: str,
-    cluster: list[dict],   # [{"id": "...", "curso": "...", "texto": "..."}]
+    cluster: list[dict],   # [{"id", "curso", "curso_nombre", "texto"}]
 ) -> str:
-    ra_lines = "\n".join(
-        f'  - {r["id"]} (curso {r["curso"]}): "{r["texto"]}"'
-        for r in cluster
-    )
+    ra_lines_parts = []
+    for r in cluster:
+        curso = r["curso"]
+        nombre = r.get("curso_nombre") or ""
+        curso_label = f"{curso} — {nombre}" if nombre else curso
+        ra_lines_parts.append(f'  - {r["id"]} (curso {curso_label}): "{r["texto"]}"')
+    ra_lines = "\n".join(ra_lines_parts)
 
     return f"""Eres un experto en diseño curricular de ingeniería de la Universidad de los Andes (Chile).
 Analiza el siguiente grupo de Resultados de Aprendizaje (RAs) de la carrera {carrera} que tienen alta similitud textual.
@@ -143,9 +154,10 @@ RESULTADOS DE APRENDIZAJE del cluster:
 TAREA: Determina cuáles pares son pedagógicamente REDUNDANTES vs COMPLEMENTARIOS.
 
 Criterios:
-- REDUNDANTE ("semantica"): los dos RAs enseñan o evalúan lo mismo sin progresión de profundidad.
-- REDUNDANTE ("curricular"): aparecen en semestres consecutivos con exactamente el mismo contenido, sin escalamiento.
-- COMPLEMENTARIO: aunque parezcan similares, uno es introducción y el otro aplicación, o difieren en contexto/herramienta.
+- REDUNDANTE ("semantica"): mismo verbo de acción + mismo objeto + mismo nivel cognitivo, sin progresión de profundidad.
+- REDUNDANTE ("curricular"): mismo contenido en cursos distintos o semestres consecutivos sin escalamiento pedagógico.
+- COMPLEMENTARIO: mismo tema pero distinto nivel (introducción vs aplicación), herramienta, contexto o profundidad.
+- NO marques redundante solo por compartir frases genéricas de plantilla RA (p. ej. "el estudiante será capaz de…").
 
 INSTRUCCIONES:
 1. Lista solo los pares verdaderamente redundantes.

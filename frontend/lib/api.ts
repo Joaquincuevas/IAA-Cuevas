@@ -36,7 +36,6 @@ export async function getStats() {
 export async function getMe() {
   return apiFetch<{
     email: string; name: string; role: string; last_login: string | null;
-    actividad: { filtros: number };
   }>("/api/me");
 }
 
@@ -45,19 +44,6 @@ export async function changePassword(oldPassword: string, newPassword: string) {
     method: "POST",
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
-}
-
-export async function saveFilterSnapshot(label: string, filters: Record<string, unknown>) {
-  return apiFetch<{ message: string }>("/api/history/filters", {
-    method: "POST",
-    body: JSON.stringify({ label, filters }),
-  });
-}
-
-export async function getFilterHistory() {
-  return apiFetch<{ snapshots: { label: string; filters: Record<string, unknown>; created_at: string }[] }>(
-    "/api/history/filters"
-  );
 }
 
 export async function getConexiones(carrera?: string) {
@@ -78,16 +64,6 @@ export async function getObjectives() {
   return apiFetch<{ objectives: { curso: string; id_objetivo: string; descripcion: string }[] }>(
     "/api/objectives"
   );
-}
-
-export async function getCobertura(carrera?: string) {
-  const q = carrera ? `?carrera=${carrera}` : "";
-  return apiFetch<{
-    stats: { cobertura_global: number; dominios: number; dominios_debiles: number; ciclos: number };
-    heatmap: { pe: string; semestre: string; nivel: number }[];
-    domains: { code: string; name: string; description: string; cobertura: number }[];
-    carreras: string[];
-  }>(`/api/cobertura${q}`);
 }
 
 // ── AI módulo: Conexiones RA→PE y Redundancia semántica ──────────────────────
@@ -122,7 +98,7 @@ export type AIRedundancyProposal = {
   curso_nombre_b?: string;
   similitud: number;
   razon: string;
-  tipo: "semantica" | "curricular";
+  tipo: "semantica" | "curricular" | "exacta";
   status: "pending" | "approved" | "rejected";
   created_at: string;
 };
@@ -270,10 +246,6 @@ export type HeatmapData = {
 
 export async function getCoberturaHeatmap(carrera: string) {
   return apiFetch<HeatmapData>(`/api/cobertura/heatmap?carrera=${carrera}`);
-}
-
-export async function getCoberturaComparacion() {
-  return apiFetch<Record<string, number>>("/api/cobertura/comparacion");
 }
 
 export async function getCoberturaCursos(carrera: string, competenciaId: number) {

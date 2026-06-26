@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, Lock, Filter, Check, AlertCircle } from "lucide-react";
-import { getMe, changePassword, getFilterHistory } from "@/lib/api";
+import { User, Lock, Check, AlertCircle } from "lucide-react";
+import { getMe, changePassword } from "@/lib/api";
 
-type Me = { email: string; name: string; role: string; last_login: string | null; actividad: { filtros: number } };
+type Me = { email: string; name: string; role: string; last_login: string | null };
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -18,22 +18,19 @@ function fmtDate(iso: string | null): string {
 
 export default function ConfiguracionPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [filters, setFilters] = useState<{ label: string; filters: Record<string, unknown>; created_at: string }[]>([]);
 
   useEffect(() => {
     getMe().then(setMe).catch(console.error);
-    getFilterHistory().then((r) => setFilters(r.snapshots)).catch(console.error);
   }, []);
 
   return (
     <div className="p-7 max-w-5xl">
       <div className="mb-5">
         <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Configuración</h1>
-        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil, seguridad de la cuenta y actividad reciente.</p>
+        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil y seguridad de la cuenta.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Perfil */}
         <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <User size={15} className="text-[#1B2A4A]" />
@@ -50,37 +47,15 @@ export default function ConfiguracionPage() {
           </div>
           <dl className="text-[12px] space-y-2">
             <Row k="Último ingreso" v={fmtDate(me?.last_login ?? null)} />
-            <Row k="Filtros guardados" v={String(me?.actividad?.filtros ?? 0)} />
           </dl>
         </section>
 
-        {/* Cambiar contraseña */}
         <section className="border border-[#E5E7EB] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Lock size={15} className="text-[#1B2A4A]" />
             <h2 className="text-[14px] font-bold text-[#111827]">Cambiar contraseña</h2>
           </div>
           <ChangePasswordForm />
-        </section>
-
-        {/* Filtros guardados */}
-        <section className="border border-[#E5E7EB] rounded-xl p-5 col-span-2">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter size={15} className="text-[#1B2A4A]" />
-            <h2 className="text-[14px] font-bold text-[#111827]">Filtros guardados</h2>
-          </div>
-          {filters.length === 0 ? (
-            <p className="text-[12px] text-[#9CA3AF]">No has guardado filtros del Explorador.</p>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-auto">
-              {filters.map((f, i) => (
-                <div key={i} className="text-[12px] border border-[#F3F4F6] rounded-md px-3 py-2">
-                  <p className="text-[#111827] font-medium">{f.label || "Filtro sin nombre"}</p>
-                  <p className="text-[#9CA3AF] text-[11px]">{fmtDate(f.created_at)}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
       </div>
     </div>

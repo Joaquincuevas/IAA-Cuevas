@@ -40,9 +40,8 @@ def main():
         if not conn.execute("SELECT 1 FROM users WHERE email=?", (old,)).fetchone():
             print(f"No existe el usuario {old}"); conn.close(); return
         conn.execute("UPDATE users SET email=? WHERE email=?", (new, old))
-        conn.execute("UPDATE filter_snapshots SET email=? WHERE email=?", (new, old))
         conn.commit(); conn.close()
-        print(f"Correo actualizado: {old} → {new} (historial conservado)")
+        print(f"Correo actualizado: {old} → {new}")
     elif cmd == "set-name" and len(args) == 3:
         email, name = args[1].strip().lower(), args[2]
         conn = auth_db._conn()

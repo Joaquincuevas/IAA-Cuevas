@@ -187,26 +187,8 @@ def get_me(email: str = Depends(verify_token)):
     user = auth_db.get_user(email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return {
-        **auth_db.public_user(user),
-        "actividad": auth_db.activity_summary(email),
-    }
+    return auth_db.public_user(user)
 
-
-class FilterSnapshotRequest(BaseModel):
-    label: str = ""
-    filters: dict = {}
-
-
-@app.post("/api/history/filters")
-def save_filter_snapshot(req: FilterSnapshotRequest, email: str = Depends(verify_token)):
-    auth_db.add_filter_snapshot(email, req.label, req.filters)
-    return {"message": "Filtro guardado"}
-
-
-@app.get("/api/history/filters")
-def get_filter_history(email: str = Depends(verify_token)):
-    return {"snapshots": auth_db.recent_filters(email)}
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 @app.get("/api/stats")
@@ -733,9 +715,9 @@ def clear_all_ai(email: str = Depends(verify_token)):
 
 @app.get("/api/ai/export/conexiones")
 def export_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_token)):
-    """Devuelve propuestas aprobadas para exportar."""
-    approved = ai_db.get_approved_ra_pe(carrera=carrera.upper() if carrera else None)
-    return JSONResponse(content=jsonable_encoder({"conexiones": approved, "total": len(approved)}))
+    """Devuelve todas las propuestas RA→PE de la carrera para export CSV."""
+    rows = ai_db.get_all_ra_pe_for_export(carrera=carrera.upper() if carrera else None)
+    return JSONResponse(content=jsonable_encoder({"conexiones": rows, "total": len(rows)}))
 
 
 if __name__ == "__main__":

@@ -1,11 +1,10 @@
 """
-Capa de usuarios, autenticación e historial por usuario.
+Capa de usuarios y autenticación.
 
 Diseño orientado a producción:
 - Almacenamiento en SQLite (backend/app.db), no en memoria ni en código.
 - Contraseñas hasheadas con PBKDF2-HMAC-SHA256 + sal por usuario (librería estándar,
   sin dependencias frágiles). Nunca se guarda ni se devuelve la contraseña en claro.
-- Historial por usuario: snapshots de filtros del Explorador.
 
 Los 4 usuarios (2 desarrolladores + 2 cliente) se siembran al iniciar si no existen.
 Para actualizar el correo real de los clientes cuando se conozca, usar `manage.py`.
@@ -14,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import os
 import sqlite3
 from datetime import datetime
@@ -75,14 +73,6 @@ def init_db() -> None:
             last_login TEXT,
             created_at TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS filter_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL,
-            label TEXT,
-            filters_json TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_filter_email ON filter_snapshots(email, id DESC);
         """
     )
     conn.commit()
@@ -133,39 +123,3 @@ def change_password(email: str, old: str, new: str) -> tuple[bool, str]:
     conn.commit()
     conn.close()
     return True, "Contraseña actualizada correctamente."
-
-
-# ── Historial: filtros del Explorador ────────────────────────────────────────
-def add_filter_snapshot(email: str, label: str, filters: dict) -> None:
-    conn = _conn()
-    conn.execute(
-        "INSERT INTO filter_snapshots (email, label, filters_json, created_at) VALUES (?,?,?,?)",
-        (_norm(email), label, json.dumps(filters, ensure_ascii=False), datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
-
-
-def recent_filters(email: str, limit: int = 10) -> list[dict]:
-    conn = _conn()
-    rows = conn.execute(
-        "SELECT label, filters_json, created_at FROM filter_snapshots WHERE email = ? ORDER BY id DESC LIMIT ?",
-        (_norm(email), limit),
-    ).fetchall()
-    conn.close()
-    out = []
-    for r in rows:
-        d = dict(r)
-        try:
-            d["filters"] = json.loads(d.pop("filters_json"))
-        except Exception:
-            d["filters"] = {}
-        out.append(d)
-    return out
-
-
-def activity_summary(email: str) -> dict:
-    conn = _conn()
-    n_filters = conn.execute("SELECT COUNT(*) FROM filter_snapshots WHERE email = ?", (_norm(email),)).fetchone()[0]
-    conn.close()
-    return {"filtros": n_filters}

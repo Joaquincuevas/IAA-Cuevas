@@ -60,12 +60,95 @@ def excel_hash(paths: list[Path]) -> str:
     return h.hexdigest()[:16]
 
 
-def should_skip(job_type: str, carrera: str | None, new_hash: str) -> bool:
-    """True si ya existe un job done con el mismo hash para ese tipo/carrera."""
-    latest = ai_db.get_latest_job(job_type, carrera)
-    if not latest:
-        return False
-    return latest.get("excel_hash") == new_hash
+# ── Duplicados exactos (sin IA) ───────────────────────────────────────────────
+_TRAILING_PUNCT_RE = re.compile(r"[.,;:]+$")
+
+
+def _normalize_ra_text(text: str) -> str:
+    """Normalización ligera para comparar RAs textualmente iguales."""
+    s = (text or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    s = _TRAILING_PUNCT_RE.sub("", s)
+    return s
+
+
+def _ra_pair_key(ra_id_a: str, ra_id_b: str) -> frozenset[str]:
+    a, b = ra_id_a.strip(), ra_id_b.strip()
+    return frozenset({a, b})
+
+
+def _find_exact_redundancy_pairs(
+    carrera: str,
+    ra_ids: list[str],
+    ra_texts: list[str],
+    curso_ids: list,
+) -> list[dict]:
+    """Pares con texto idéntico tras normalización ligera."""
+    groups: dict[str, list[int]] = {}
+    for i, text in enumerate(ra_texts):
+        norm = _normalize_ra_text(text)
+        if not norm:
+            continue
+        groups.setdefault(norm, []).append(i)
+
+    proposals: list[dict] = []
+    seen: set[frozenset[str]] = set()
+    for idxs in groups.values():
+        if len(idxs) < 2:
+            continue
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                i, j = idxs[a], idxs[b]
+                ra_a, ra_b = str(ra_ids[i]).strip(), str(ra_ids[j]).strip()
+                key = _ra_pair_key(ra_a, ra_b)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if ra_a <= ra_b:
+                    proposals.append({
+                        "carrera": carrera,
+                        "ra_id_a": ra_a,
+                        "ra_texto_a": ra_texts[i],
+                        "curso_a": str(curso_ids[i]).strip(),
+                        "ra_id_b": ra_b,
+                        "ra_texto_b": ra_texts[j],
+                        "curso_b": str(curso_ids[j]).strip(),
+                        "similitud": 1.0,
+                        "razon": "Texto idéntico (detección automática)",
+                        "tipo": "exacta",
+                    })
+                else:
+                    proposals.append({
+                        "carrera": carrera,
+                        "ra_id_a": ra_b,
+                        "ra_texto_a": ra_texts[j],
+                        "curso_a": str(curso_ids[j]).strip(),
+                        "ra_id_b": ra_a,
+                        "ra_texto_b": ra_texts[i],
+                        "curso_b": str(curso_ids[i]).strip(),
+                        "similitud": 1.0,
+                        "razon": "Texto idéntico (detección automática)",
+                        "tipo": "exacta",
+                    })
+    return proposals
+
+
+def _cluster_all_same_text(sub: list[int], ra_texts: list[str]) -> bool:
+    norms = {_normalize_ra_text(ra_texts[i]) for i in sub}
+    norms.discard("")
+    return len(norms) <= 1 and len(sub) >= 2
+
+
+def _course_name_map(data: dict) -> dict[str, str]:
+    general = data.get("general")
+    if general is None:
+        return {}
+    return dict(
+        zip(
+            general["ID"].astype(str).str.strip(),
+            general["Nombre"].astype(str).str.strip(),
+        )
+    )
 
 
 # ── TF-IDF prefiltro ──────────────────────────────────────────────────────────
@@ -411,12 +494,19 @@ def _process_redundancia_cluster(
     ra_ids: list[str],
     ra_texts: list[str],
     curso_ids: list,
+    curso_nombre_map: dict[str, str],
+    exact_pair_keys: set[frozenset[str]],
 ) -> _RedundanciaResult:
     client = _get_groq(groq_key)
-    cluster_items = [
-        {"id": ra_ids[i], "curso": str(curso_ids[i]).strip(), "texto": ra_texts[i]}
-        for i in sub
-    ]
+    cluster_items = []
+    for i in sub:
+        curso = str(curso_ids[i]).strip()
+        cluster_items.append({
+            "id": ra_ids[i],
+            "curso": curso,
+            "curso_nombre": curso_nombre_map.get(curso, ""),
+            "texto": ra_texts[i],
+        })
     prompt = ai_prompts.build_redundancia_prompt(carrera=carrera, cluster=cluster_items)
 
     try:
@@ -432,6 +522,8 @@ def _process_redundancia_cluster(
     for par in response.pares_redundantes:
         if par.ra_id_a not in valid_ra_ids or par.ra_id_b not in valid_ra_ids:
             continue
+        if _ra_pair_key(par.ra_id_a, par.ra_id_b) in exact_pair_keys:
+            continue
         proposals.append({
             "carrera": carrera,
             "ra_id_a": par.ra_id_a,
@@ -442,7 +534,7 @@ def _process_redundancia_cluster(
             "curso_b": ra_to_curso.get(par.ra_id_b, ""),
             "similitud": 0.7,
             "razon": par.razon,
-            "tipo": par.tipo if par.tipo in ("semantica", "curricular") else "semantica",
+            "tipo": par.tipo if par.tipo in ("semantica", "curricular", "exacta") else "semantica",
         })
 
     return _RedundanciaResult(carrera, proposals, False)
@@ -670,6 +762,10 @@ def run_conexiones_prueba(
 
 
 # ── Pipeline 2: Redundancia semántica ────────────────────────────────────────
+# Umbral TF-IDF para prefiltro antes de Groq (sin bajar a 0.30: mucho ruido con union-find).
+REDUNDANCIA_TFIDF_THRESHOLD = 0.52
+
+
 def run_redundancia(
     job_id: int,
     data: dict,
@@ -677,24 +773,48 @@ def run_redundancia(
     carrera_filter: str | None = None,
 ) -> dict:
     """
-    Por carrera: TF-IDF clusters → Groq confirma pares redundantes → insertar propuestas.
+    Por carrera: duplicados exactos → TF-IDF clusters (umbral 0.52) → Groq → insertar propuestas.
     """
     df_obj: pd.DataFrame = data["objectives"]
+    curso_nombre_map = _course_name_map(data)
 
     CARRERAS = [carrera_filter] if carrera_filter else ["ICA", "ICC", "ICE", "IOC", "ICI"]
-    stats = {"cursos_procesados": 0, "clusters": 0, "propuestas": 0, "errores": 0}
+    stats = {
+        "cursos_procesados": 0,
+        "clusters": 0,
+        "propuestas": 0,
+        "exactas": 0,
+        "errores": 0,
+    }
 
-    work_units: list[tuple] = []
-    enrich_context: dict[str, tuple[list, list]] = {}
+    carrera_data: dict[str, tuple] = {}
     for carrera in CARRERAS:
         df_car = df_obj[df_obj["Carrera"] == carrera].copy()
         ra_ids = df_car["ID_Objetivo"].tolist()
         ra_texts = [str(r).strip() for r in df_car["Objetivo"].tolist()]
         curso_ids = df_car["ID"].tolist()
-        if len(ra_ids) < 2:
-            continue
+        if len(ra_ids) >= 2:
+            carrera_data[carrera] = (ra_ids, ra_texts, curso_ids)
+
+    for car in carrera_data:
+        ai_db.delete_redundancy_proposals_for_carrera(car)
+
+    exact_proposals: list[dict] = []
+    exact_pair_keys: set[frozenset[str]] = set()
+    for carrera, (ra_ids, ra_texts, curso_ids) in carrera_data.items():
+        pairs = _find_exact_redundancy_pairs(carrera, ra_ids, ra_texts, curso_ids)
+        exact_proposals.extend(pairs)
+        for p in pairs:
+            exact_pair_keys.add(_ra_pair_key(p["ra_id_a"], p["ra_id_b"]))
+
+    if exact_proposals:
+        stats["exactas"] = ai_db.bulk_insert_redundancy(job_id, exact_proposals)
+
+    work_units: list[tuple] = []
+    enrich_context: dict[str, tuple[list, list]] = {}
+    for carrera, (ra_ids, ra_texts, curso_ids) in carrera_data.items():
         enrich_context[carrera] = (ra_ids, ra_texts)
-        clusters = _tfidf_clusters(ra_ids, ra_texts, threshold=0.52)
+        clusters = _tfidf_clusters(ra_ids, ra_texts, threshold=REDUNDANCIA_TFIDF_THRESHOLD)
         stats["clusters"] += len(clusters)
         for cluster_idxs in clusters:
             if len(cluster_idxs) > 10:
@@ -702,15 +822,27 @@ def run_redundancia(
             else:
                 sub_clusters = [cluster_idxs]
             for sub in sub_clusters:
+                if _cluster_all_same_text(sub, ra_texts):
+                    continue
                 work_units.append((carrera, sub, ra_ids, ra_texts, curso_ids))
 
     total = len(work_units)
-    if total == 0:
-        _progress(job_id, phase="redundancia", step=0, total=1, message="No se encontraron clusters similares")
+    if total == 0 and stats["exactas"] == 0:
+        _progress(job_id, phase="redundancia", step=0, total=1, message="No se encontraron redundancias")
+        stats["propuestas"] = stats["exactas"]
         return stats
 
-    for car in enrich_context:
-        ai_db.delete_redundancy_proposals_for_carrera(car)
+    if total == 0:
+        stats["propuestas"] = stats["exactas"]
+        _progress(
+            job_id,
+            phase="redundancia",
+            step=1,
+            total=1,
+            message=f"Solo duplicados exactos: {stats['exactas']} pares (sin llamadas Groq)",
+            extra={"propuestas": stats["exactas"], "errores": 0},
+        )
+        return stats
 
     _progress(
         job_id,
@@ -718,7 +850,7 @@ def run_redundancia(
         step=0,
         total=total,
         message=f"Analizando {total} clusters ({GROQ_MAX_WORKERS} en paralelo)…",
-        extra={"propuestas": 0, "errores": 0},
+        extra={"propuestas": stats["exactas"], "errores": 0},
     )
 
     all_proposals: list[dict] = []
@@ -741,7 +873,10 @@ def run_redundancia(
                 step=completed,
                 total=total,
                 message=f"[{result.carrera}] Cluster {completed}/{total}",
-                extra={"propuestas": len(all_proposals), "errores": stats["errores"]},
+                extra={
+                    "propuestas": stats["exactas"] + len(all_proposals),
+                    "errores": stats["errores"],
+                },
             )
 
     with ThreadPoolExecutor(max_workers=GROQ_MAX_WORKERS) as pool:
@@ -754,6 +889,8 @@ def run_redundancia(
                 ra_ids,
                 ra_texts,
                 curso_ids,
+                curso_nombre_map,
+                exact_pair_keys,
             )
             for carrera, sub, ra_ids, ra_texts, curso_ids in work_units
         ]
@@ -772,21 +909,25 @@ def run_redundancia(
 
     if cancelled:
         if all_proposals:
-            stats["propuestas"] = ai_db.bulk_insert_redundancy(job_id, all_proposals)
+            inserted = ai_db.bulk_insert_redundancy(job_id, all_proposals)
+            stats["propuestas"] = stats["exactas"] + inserted
+        else:
+            stats["propuestas"] = stats["exactas"]
         return stats
 
     for carrera, (ra_ids, ra_texts) in enrich_context.items():
         car_props = [p for p in all_proposals if p["carrera"] == carrera]
         _enrich_similitud(car_props, ra_ids, ra_texts)
 
-    stats["propuestas"] = ai_db.bulk_insert_redundancy(job_id, all_proposals)
+    inserted = ai_db.bulk_insert_redundancy(job_id, all_proposals) if all_proposals else 0
+    stats["propuestas"] = stats["exactas"] + inserted
 
     _progress(
         job_id,
         phase="redundancia",
         step=total,
         total=total,
-        message=f"Redundancia completada: {stats['propuestas']} pares detectados",
+        message=f"Redundancia completada: {stats['propuestas']} pares ({stats['exactas']} exactos)",
         extra={"propuestas": stats["propuestas"], "errores": stats["errores"]},
     )
 
@@ -808,6 +949,8 @@ def _enrich_similitud(proposals: list[dict], ra_ids: list[str], ra_texts: list[s
         return
 
     for p in proposals:
+        if p.get("tipo") == "exacta":
+            continue
         i = ra_index.get(p["ra_id_a"])
         j = ra_index.get(p["ra_id_b"])
         if i is not None and j is not None:

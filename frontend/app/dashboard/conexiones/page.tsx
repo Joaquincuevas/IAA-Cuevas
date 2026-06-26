@@ -67,7 +67,7 @@ export default function ConexionesPage() {
   const [popupPos, setPopupPos] = useState<{ top: number; right: number } | null>(null);
 
   // vote modal
-  const [voting, setVoting]       = useState<{ id: number; voto: "approve" | "reject" } | null>(null);
+  const [voting, setVoting]       = useState<{ id: number; voto: "approve" | "reject"; currentStatus: string } | null>(null);
   const [comentario, setComentario] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -150,9 +150,19 @@ export default function ConexionesPage() {
     setFSort("confianza_desc");
   }
 
-  async function handleVote(id: number, voto: "approve" | "reject") {
-    setVoting({ id, voto });
+  async function handleVote(id: number, voto: "approve" | "reject", currentStatus: string) {
+    setVoting({ id, voto, currentStatus });
     setComentario("");
+  }
+
+  function conexionesVoteTitle(voto: "approve" | "reject", currentStatus: string): string {
+    if (currentStatus === "pending") {
+      return voto === "approve" ? "Aprobar propuesta" : "Rechazar propuesta";
+    }
+    if (voto === "approve") {
+      return currentStatus === "rejected" ? "Cambiar a aprobada" : "Confirmar aprobación";
+    }
+    return currentStatus === "approved" ? "Cambiar a rechazada" : "Confirmar rechazo";
   }
 
   async function submitVote() {
@@ -184,7 +194,7 @@ export default function ConexionesPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `conexiones_aprobadas_${carrera}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `conexiones_${carrera}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -204,7 +214,7 @@ export default function ConexionesPage() {
           onClick={handleExport}
           className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors flex-shrink-0"
         >
-          <Download size={14} /> Exportar aprobadas
+          <Download size={14} /> Exportar CSV
         </button>
       </div>
 
@@ -513,14 +523,14 @@ export default function ConexionesPage() {
                     <div className="flex items-center gap-1">
                       <button
                         title="Aprobar"
-                        onClick={() => handleVote(p.id, "approve")}
+                        onClick={() => handleVote(p.id, "approve", p.status)}
                         className="p-1 rounded hover:bg-[#ECFDF5] text-[#10B981] transition-colors"
                       >
                         <ThumbsUp size={13} />
                       </button>
                       <button
                         title="Rechazar"
-                        onClick={() => handleVote(p.id, "reject")}
+                        onClick={() => handleVote(p.id, "reject", p.status)}
                         className="p-1 rounded hover:bg-[#FEF2F2] text-[#EF4444] transition-colors"
                       >
                         <ThumbsDown size={13} />
@@ -566,7 +576,7 @@ export default function ConexionesPage() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-[420px]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[15px] font-bold text-[#111827]">
-                {voting.voto === "approve" ? "Aprobar" : "Rechazar"} propuesta
+                {conexionesVoteTitle(voting.voto, voting.currentStatus)}
               </h3>
               <button onClick={() => setVoting(null)} className="text-[#9CA3AF] hover:text-[#374151]">
                 <X size={16} />
