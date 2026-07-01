@@ -50,6 +50,7 @@ export default function ExportCsvButton({
   return (
     <div className="relative flex-shrink-0" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         disabled={busy}
         className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors disabled:opacity-60"
