@@ -5,6 +5,7 @@ __pycache__/
 
 # Datos de runtime (usuarios, hashes, historial)
 backend/app.db
+backend/app.db-*
 data/app.db
 backend/.env
 backend/venv/

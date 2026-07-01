@@ -10,6 +10,9 @@ import {
   type AIRedundancyProposal,
   type AIStats,
 } from "@/lib/api";
+import { downloadCSV } from "@/lib/csv";
+import SyncButton from "@/components/SyncButton";
+import ExportCsvButton from "@/components/ExportCsvButton";
 
 // Fallback mientras carga /api/carreras (que además incluye las planillas subidas)
 const CARRERAS_FALLBACK = [
@@ -110,15 +113,59 @@ export default function RedundanciaPage() {
     }
   }
 
+  const CSV_HEADERS = [
+    "ID", "Carrera", "Curso A", "Nombre curso A", "RA A", "Texto RA A",
+    "Curso B", "Nombre curso B", "RA B", "Texto RA B",
+    "Similitud", "Tipo", "Razón", "Estado",
+  ];
+  const STATUS_CSV: Record<string, string> = { pending: "Pendiente", approved: "Confirmada", rejected: "Descartada" };
+  const TIPO_CSV: Record<string, string> = { semantica: "Semántica", curricular: "Curricular", exacta: "Duplicado exacto" };
+
+  function proposalToRow(p: AIRedundancyProposal) {
+    return [
+      p.id, p.carrera, p.curso_a, p.curso_nombre_a ?? "", p.ra_id_a, p.ra_texto_a,
+      p.curso_b, p.curso_nombre_b ?? "", p.ra_id_b, p.ra_texto_b,
+      p.similitud.toFixed(2).replace(".", ","), TIPO_CSV[p.tipo] ?? p.tipo,
+      p.razon, STATUS_CSV[p.status] ?? p.status,
+    ];
+  }
+
+  async function handleExport(scope: "filtered" | "all") {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const status = scope === "filtered" && fStatus !== "Todos" ? fStatus : undefined;
+    const data = await getAIRedundancia({ carrera, status, limit: 100000, offset: 0 });
+    const sufijo = scope === "filtered" ? "filtradas" : "todas";
+    downloadCSV(`redundancias_${carrera}_${sufijo}_${hoy}.csv`, CSV_HEADERS, data.proposals.map(proposalToRow));
+  }
+
   return (
     <div className="p-7 max-w-[1400px]">
       {/* Header */}
-      <div className="mb-5">
-        <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Redundancia de objetivos</h1>
-        <p className="text-[13px] text-[#6B7280] mt-0.5">
-          Pares de Resultados de Aprendizaje semánticamente similares detectados por IA.
-          Confirma si son redundantes o descártalos como complementarios.
-        </p>
+      <div className="flex items-start justify-between mb-5 gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Redundancia de objetivos</h1>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">
+            Pares de Resultados de Aprendizaje semánticamente similares detectados por IA.
+            Confirma si son redundantes o descártalos como complementarios.
+          </p>
+        </div>
+        <div className="flex gap-2.5">
+          <SyncButton
+            onSync={async () => {
+              await Promise.all([
+                fetchData(carrera, offset, fStatus),
+                getCarreras()
+                  .then((r) => setCarreras(r.carreras.map((c) => ({ code: c.code, label: c.nombre }))))
+                  .catch(() => {}),
+              ]);
+            }}
+          />
+          <ExportCsvButton
+            onExport={handleExport}
+            filteredLabel="Vista actual (con filtros)"
+            allLabel={`Todos los pares (${carrera})`}
+          />
+        </div>
       </div>
 
       {/* KPI cards */}

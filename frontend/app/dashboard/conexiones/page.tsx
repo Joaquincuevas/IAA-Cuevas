@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { Download, SlidersHorizontal, X, ThumbsUp, ThumbsDown, MessageSquare, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, X, ThumbsUp, ThumbsDown, MessageSquare, ChevronDown } from "lucide-react";
 import {
   getAIConexiones,
   getAIStats,
@@ -11,6 +11,9 @@ import {
   type AIRaPeProposal,
   type AIStats,
 } from "@/lib/api";
+import { downloadCSV } from "@/lib/csv";
+import SyncButton from "@/components/SyncButton";
+import ExportCsvButton from "@/components/ExportCsvButton";
 
 // Fallback mientras carga /api/carreras (que además incluye las planillas subidas)
 const CARRERAS_FALLBACK = [
@@ -193,20 +196,45 @@ export default function ConexionesPage() {
     }
   }
 
-  async function handleExport() {
-    const data = await exportAIConexiones(carrera);
-    const header = "id,carrera,curso_id,curso_nombre,ra_id,ra_texto,pe_id,pe_texto,confianza,razon,status";
-    const rows = data.conexiones.map((p) =>
-      [p.id, p.carrera, p.curso_id, `"${p.curso_nombre}"`, p.ra_id, `"${p.ra_texto.replace(/"/g, "'")}"`, p.pe_id, `"${p.pe_texto.replace(/"/g, "'")}"`, p.confianza.toFixed(2), `"${p.razon.replace(/"/g, "'")}"`, p.status].join(",")
-    );
-    const csv = [header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `conexiones_${carrera}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const CSV_HEADERS = [
+    "ID", "Carrera", "Curso", "Nombre curso", "RA", "Texto RA",
+    "PE", "Texto PE", "Confianza", "Razón", "Estado",
+  ];
+  const STATUS_CSV: Record<string, string> = { pending: "Pendiente", approved: "Aprobada", rejected: "Rechazada" };
+
+  function proposalToRow(p: AIRaPeProposal) {
+    return [
+      p.id, p.carrera, p.curso_id, p.curso_nombre, p.ra_id, p.ra_texto,
+      p.pe_id, p.pe_texto, p.confianza.toFixed(2).replace(".", ","),
+      p.razon, STATUS_CSV[p.status] ?? p.status,
+    ];
+  }
+
+  async function handleExport(scope: "filtered" | "all") {
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (scope === "all") {
+      const data = await exportAIConexiones(carrera);
+      downloadCSV(`conexiones_${carrera}_todas_${hoy}.csv`, CSV_HEADERS, data.conexiones.map(proposalToRow));
+      return;
+    }
+    // Vista actual: mismos filtros de servidor que la tabla, sin paginación,
+    // más los filtros locales de texto (PE, curso, RA).
+    const data = await getAIConexiones({
+      carrera,
+      status: fStatus !== "Todos" ? fStatus : undefined,
+      sort: fSort,
+      confianza_min: fConfMin / 100,
+      confianza_max: fConfMax / 100,
+      limit: 100000,
+      offset: 0,
+    });
+    const rows = data.proposals.filter((p) => {
+      if (fPE    && !p.pe_id.toLowerCase().includes(fPE.toLowerCase()))       return false;
+      if (fCurso && !p.curso_id.toLowerCase().includes(fCurso.toLowerCase())) return false;
+      if (fRA    && !p.ra_texto.toLowerCase().includes(fRA.toLowerCase()))     return false;
+      return true;
+    });
+    downloadCSV(`conexiones_${carrera}_filtradas_${hoy}.csv`, CSV_HEADERS, rows.map(proposalToRow));
   }
 
   return (
@@ -220,12 +248,24 @@ export default function ConexionesPage() {
             Aprueba o rechaza cada propuesta.
           </p>
         </div>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors flex-shrink-0"
-        >
-          <Download size={14} /> Exportar CSV
-        </button>
+        <div className="flex gap-2.5">
+          <SyncButton
+            onSync={async () => {
+              await Promise.all([
+                fetchData(carrera, offset, fStatus, fSort, fConfMin, fConfMax),
+                getCarreras()
+                  .then((r) => setCarreras(r.carreras.map((c) => ({ code: c.code, label: c.nombre }))))
+                  .catch(() => {}),
+              ]);
+            }}
+          />
+          <ExportCsvButton
+            onExport={handleExport}
+            filteredLabel="Vista actual (con filtros)"
+            allLabel={`Todas las propuestas (${carrera})`}
+            filteredCount={filtered.length < total ? undefined : filtered.length}
+          />
+        </div>
       </div>
 
       {/* KPI cards */}

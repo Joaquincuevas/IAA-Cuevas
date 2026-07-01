@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Download, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { getStats } from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import SyncButton from "@/components/SyncButton";
 
 const EXPLORE_CARDS = [
   {
@@ -39,14 +40,7 @@ export default function DashboardPage() {
             Bienvenido, {user?.name ?? "usuario"} — Mallas curriculares · Universidad de los Andes
           </p>
         </div>
-        <div className="flex gap-2.5">
-          <button className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
-            <RefreshCw size={14} /> Sincronizar
-          </button>
-          <button className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
-            <Download size={14} /> Exportar
-          </button>
-        </div>
+        <SyncButton onSync={async () => setStats(await getStats())} />
       </div>
 
       {/* Stat cards */}
