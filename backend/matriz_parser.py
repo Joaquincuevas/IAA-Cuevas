@@ -1,3 +1,4 @@
+import io
 import re
 from pathlib import Path
 
@@ -60,10 +61,27 @@ def _find_header_row(df: pd.DataFrame) -> int:
     raise ValueError("No se encontró fila header con CODIGO y TITULO")
 
 
+def _find_sheet_and_header(xl: pd.ExcelFile) -> tuple[str, int]:
+    """Locate the sheet + header row containing CODIGO and TITULO.
+
+    Legacy files have a single 'Cursos' sheet; newer files (e.g. QUIMICA) also
+    include a 'Malla' sheet before the tributación matrix.
+    """
+    for sheet in xl.sheet_names:
+        df_raw = xl.parse(sheet, header=None)
+        try:
+            return sheet, _find_header_row(df_raw)
+        except ValueError:
+            continue
+    raise ValueError(
+        "Ninguna hoja del Excel contiene una fila header con CODIGO y TITULO"
+    )
+
+
 def parse_matriz_tributacion(
-    filepath: Path | str, carrera_code: str
+    filepath: Path | str | io.BytesIO, carrera_code: str
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Parse a Matriz de Tributación PE Excel file.
+    """Parse a Matriz de Tributación PE Excel file (path or in-memory bytes).
 
     Returns:
         df_cursos:       [codigo, nombre, semestre, carrera]
@@ -73,16 +91,25 @@ def parse_matriz_tributacion(
         df_competencias: [carrera, competencia_id, competencia_texto, texto_corto]
                          All PE competencias including those with zero tributations.
     """
-    filepath = Path(filepath)
-    df_raw = pd.read_excel(filepath, header=None)
-    header_row = _find_header_row(df_raw)
+    if isinstance(filepath, (str, Path)):
+        filepath = Path(filepath)
+    xl = pd.ExcelFile(filepath)
+    sheet, header_row = _find_sheet_and_header(xl)
 
-    df = pd.read_excel(filepath, header=header_row)
+    df = xl.parse(sheet, header=header_row)
     cols = df.columns.tolist()
 
-    # Layout: col 0=CODIGO, col 1=TITULO, col 2=semestre (header=carrera code), col 3+=PE
-    pe_col_names = cols[3:]
-    competencias = {i + 1: str(col).strip() for i, col in enumerate(pe_col_names)}
+    # Layout: col 0=CODIGO, col 1=TITULO, col 2=semestre (header=carrera code), col 3+=PE.
+    # Some files insert extra non-PE columns (e.g. REQUISITOS in QUIMICA) or empty
+    # (Unnamed) columns among the PE block — skip them, keeping ids sequential.
+    pe_indices = [
+        i
+        for i in range(3, len(cols))
+        if not str(cols[i]).strip().upper().startswith("REQUISITO")
+        and not str(cols[i]).startswith("Unnamed")
+    ]
+    competencias = {k + 1: str(cols[i]).strip() for k, i in enumerate(pe_indices)}
+    pe_col_by_id = {k + 1: i for k, i in enumerate(pe_indices)}
 
     # Keep only rows with a valid course code in column 0
     df = df.dropna(subset=[cols[0]])
@@ -103,7 +130,7 @@ def parse_matriz_tributacion(
         )
 
         for comp_id, comp_texto in competencias.items():
-            cell = row[cols[3 + comp_id - 1]]
+            cell = row.iloc[pe_col_by_id[comp_id]]
             if isinstance(cell, str):
                 val = cell.strip().lower()
                 # Legacy Excel files use "X"/"x" to mark any tribute; treat as level "c".

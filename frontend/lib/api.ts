@@ -267,3 +267,44 @@ export async function getCoberturaTributaciones(carrera: string) {
   );
 }
 
+
+// ── Planillas (matrices de tributación) ────────────────────────────────────────
+
+export type MatrizInfo = {
+  carrera: string;
+  nombre: string;
+  filename: string;
+  origen: "base" | "subida";
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  n_cursos: number;
+  n_tributaciones: number;
+  n_competencias: number;
+};
+
+export async function getMatrices() {
+  return apiFetch<{ matrices: MatrizInfo[] }>("/api/matrices");
+}
+
+export async function uploadMatriz(file: File, carrera: string, nombre: string) {
+  const token = getToken();
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("carrera", carrera);
+  fd.append("nombre", nombre);
+  // No usar apiFetch: multipart necesita que el browser fije el Content-Type con boundary
+  const res = await fetch(`${BASE}/api/matrices/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Error al subir la planilla");
+  }
+  return res.json() as Promise<{ message: string; matriz: MatrizInfo }>;
+}
+
+export async function deleteMatriz(carrera: string) {
+  return apiFetch<{ message: string }>(`/api/matrices/${carrera}`, { method: "DELETE" });
+}

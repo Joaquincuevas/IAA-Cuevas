@@ -364,7 +364,12 @@ def _conexiones_work_items(
     """Lista de (carrera, curso_norm, curso_id, ras, pe_ids) a procesar."""
     df_obj: pd.DataFrame = data["objectives"]
     df_trib: pd.DataFrame = matrices["tributacion"]
-    CARRERAS = [carrera_filter] if carrera_filter else ["ICA", "ICC", "ICE", "IOC", "ICI"]
+    # Carreras dinámicas: incluye tanto las base como las planillas subidas
+    CARRERAS = (
+        [carrera_filter]
+        if carrera_filter
+        else sorted(df_trib["carrera"].astype(str).str.strip().unique().tolist())
+    )
 
     curso_pe_map: dict[str, dict[str, list[str]]] = {}
     for _, row in df_trib.iterrows():
@@ -778,7 +783,12 @@ def run_redundancia(
     df_obj: pd.DataFrame = data["objectives"]
     curso_nombre_map = _course_name_map(data)
 
-    CARRERAS = [carrera_filter] if carrera_filter else ["ICA", "ICC", "ICE", "IOC", "ICI"]
+    # Redundancia trabaja sobre RAs (df_obj); usa todas las carreras con objetivos
+    CARRERAS = (
+        [carrera_filter]
+        if carrera_filter
+        else sorted(df_obj["Carrera"].dropna().astype(str).str.strip().unique().tolist())
+    )
     stats = {
         "cursos_procesados": 0,
         "clusters": 0,

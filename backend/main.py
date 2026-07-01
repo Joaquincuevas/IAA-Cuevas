@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+import hashlib
+import io
+import re
 import pandas as pd
 import networkx as nx
 from pathlib import Path
@@ -15,10 +18,16 @@ import os
 import threading
 from collections import defaultdict
 from dotenv import load_dotenv
-from matriz_parser import parse_todas_las_matrices, calcular_cobertura_por_semestre
+from matriz_parser import (
+    CARRERA_FILES,
+    parse_matriz_tributacion,
+    parse_todas_las_matrices,
+    calcular_cobertura_por_semestre,
+)
 import auth_db
 import ai_db
 import ai_engine
+import matrices_db
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -51,30 +60,59 @@ CARRERA_NAMES = {
 # ── Matrices cache ─────────────────────────────────────────────────────────────
 _matrices_cache: dict | None = None
 
+# Carreras base (archivos Excel del repo) + subidas vía frontend (SQLite).
+BASE_CARRERAS = list(CARRERA_FILES.keys())
+CARRERAS_MATRICES: list[str] = list(BASE_CARRERAS)
+
 def get_matrices() -> dict:
     if _matrices_cache is None:
         raise HTTPException(status_code=503, detail="Matrices de tributación no cargadas")
     return _matrices_cache
 
 
+def _reload_matrices() -> None:
+    """(Re)construye el cache: archivos base + planillas subidas (BLOBs en SQLite)."""
+    global _matrices_cache
+    df_cursos, df_tributacion, df_competencias = parse_todas_las_matrices(DATA_FOLDER)
+
+    uploaded = matrices_db.list_matrices()
+    extra_carreras: list[str] = []
+    for m in uploaded:
+        blob = matrices_db.get_blob(m["carrera"])
+        if not blob:
+            continue
+        try:
+            c, t, comp = parse_matriz_tributacion(io.BytesIO(blob), m["carrera"])
+            df_cursos = pd.concat([df_cursos, c], ignore_index=True)
+            df_tributacion = pd.concat([df_tributacion, t], ignore_index=True)
+            df_competencias = pd.concat([df_competencias, comp], ignore_index=True)
+            extra_carreras.append(m["carrera"])
+            CARRERA_NAMES.setdefault(m["carrera"], m["carrera_nombre"] or m["carrera"])
+        except Exception as e:
+            print(f"WARNING: planilla subida {m['carrera']} no parseable, se omite: {e}")
+
+    _matrices_cache = {
+        "cursos": df_cursos,
+        "tributacion": df_tributacion,
+        "competencias": df_competencias,
+    }
+    CARRERAS_MATRICES[:] = BASE_CARRERAS + extra_carreras
+    print(
+        f"Matrices cargadas: {len(df_cursos)} cursos, {len(df_tributacion)} tributaciones "
+        f"({len(BASE_CARRERAS)} base + {len(extra_carreras)} subidas)"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
-    global _matrices_cache
     auth_db.init_db()
     ai_db.init_ai_tables()
+    matrices_db.init_matrices_table()
     n_orphans = ai_db.recover_orphan_jobs()
     if n_orphans:
         print(f"AI jobs huérfanos marcados como error: {n_orphans}")
     try:
-        df_cursos, df_tributacion, df_competencias = parse_todas_las_matrices(DATA_FOLDER)
-        _matrices_cache = {
-            "cursos": df_cursos,
-            "tributacion": df_tributacion,
-            "competencias": df_competencias,
-        }
-        print(
-            f"Matrices cargadas: {len(df_cursos)} cursos, {len(df_tributacion)} tributaciones"
-        )
+        _reload_matrices()
     except Exception as e:
         print(f"WARNING: No se pudieron cargar las matrices de tributación: {e}")
     yield
@@ -256,9 +294,6 @@ def get_conexiones(carrera: Optional[str] = None, email: str = Depends(verify_to
     }
 
 # ── Cobertura (matrices de tributación) ───────────────────────────────────────
-
-CARRERAS_MATRICES = ["ICA", "ICC", "ICE", "IOC", "ICI"]
-
 
 def _max_sem_para_carrera(df_cursos: pd.DataFrame, carrera: str) -> int:
     c = df_cursos[df_cursos["carrera"] == carrera]
@@ -492,6 +527,110 @@ def get_dashboard_summary(email: str = Depends(verify_token)):
     }
 
 
+# ── Planillas (matrices de tributación) ───────────────────────────────────────
+
+_CARRERA_CODE_RE = re.compile(r"^[A-Z]{2,5}$")
+_MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@app.get("/api/matrices")
+def get_matrices_list(email: str = Depends(verify_token)):
+    """Todas las planillas: base (repo) + subidas por usuarios (SQLite)."""
+    cursos_df = _matrices_cache["cursos"] if _matrices_cache is not None else None
+    trib_df = _matrices_cache["tributacion"] if _matrices_cache is not None else None
+    comp_df = _matrices_cache["competencias"] if _matrices_cache is not None else None
+
+    def counts_for(carrera: str) -> dict:
+        if cursos_df is None:
+            return {"n_cursos": 0, "n_tributaciones": 0, "n_competencias": 0}
+        return {
+            "n_cursos": int((cursos_df["carrera"] == carrera).sum()),
+            "n_tributaciones": int((trib_df["carrera"] == carrera).sum()),
+            "n_competencias": int(comp_df[comp_df["carrera"] == carrera]["competencia_id"].nunique()),
+        }
+
+    rows = []
+    for code, filename in CARRERA_FILES.items():
+        rows.append({
+            "carrera": code,
+            "nombre": CARRERA_NAMES.get(code, code),
+            "filename": filename,
+            "origen": "base",
+            "uploaded_by": None,
+            "uploaded_at": None,
+            **counts_for(code),
+        })
+    for m in matrices_db.list_matrices():
+        rows.append({
+            "carrera": m["carrera"],
+            "nombre": m["carrera_nombre"] or m["carrera"],
+            "filename": m["filename"],
+            "origen": "subida",
+            "uploaded_by": m["uploaded_by"],
+            "uploaded_at": m["uploaded_at"],
+            "n_cursos": m["n_cursos"],
+            "n_tributaciones": m["n_tributaciones"],
+            "n_competencias": m["n_competencias"],
+        })
+    return {"matrices": rows}
+
+
+@app.post("/api/matrices/upload")
+async def upload_matriz(
+    file: UploadFile = File(...),
+    carrera: str = Form(...),
+    nombre: str = Form(""),
+    email: str = Depends(verify_token),
+):
+    """Sube una planilla de tributación nueva, la valida parseándola y la persiste."""
+    code = carrera.upper().strip()
+    if not _CARRERA_CODE_RE.match(code):
+        raise HTTPException(status_code=400, detail="Código de carrera inválido: usa 2–5 letras (ej: ICQ)")
+    if code in BASE_CARRERAS:
+        raise HTTPException(status_code=409, detail=f"{code} es una carrera base del sistema y no puede reemplazarse")
+
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel (.xlsx)")
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande (máx 5 MB)")
+
+    try:
+        df_c, df_t, df_comp = parse_matriz_tributacion(io.BytesIO(content), code)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo interpretar la planilla: {e}. Debe tener una hoja con columnas CODIGO, TITULO, semestre y competencias PE/APE.",
+        )
+    if df_c.empty or df_t.empty:
+        raise HTTPException(status_code=400, detail="La planilla no contiene cursos o tributaciones reconocibles")
+
+    saved = matrices_db.save_matriz(
+        carrera=code,
+        carrera_nombre=nombre.strip() or code,
+        filename=file.filename or f"{code}.xlsx",
+        file_blob=content,
+        uploaded_by=email,
+        n_cursos=len(df_c),
+        n_tributaciones=len(df_t),
+        n_competencias=int(df_comp["competencia_id"].nunique()),
+    )
+    _reload_matrices()
+    return {"message": f"Planilla {code} cargada y disponible para análisis", "matriz": saved}
+
+
+@app.delete("/api/matrices/{carrera}")
+def delete_matriz(carrera: str, email: str = Depends(verify_token)):
+    """Elimina una planilla subida (las base del repo no se pueden borrar)."""
+    code = carrera.upper().strip()
+    if code in BASE_CARRERAS:
+        raise HTTPException(status_code=409, detail="Las planillas base no se pueden eliminar")
+    if not matrices_db.delete_matriz(code):
+        raise HTTPException(status_code=404, detail=f"No hay planilla subida para {code}")
+    _reload_matrices()
+    return {"message": f"Planilla {code} eliminada"}
+
+
 # ── AI Módulo: conexiones RA→PE y redundancia semántica ──────────────────────
 
 class RecomputeRequest(BaseModel):
@@ -530,18 +669,12 @@ def recompute_ai(req: RecomputeRequest, email: str = Depends(verify_token)):
     if not groq_key:
         raise HTTPException(status_code=500, detail="GROQ_API_KEY no configurada")
 
-    # Compute Excel hash for cache invalidation
-    excel_paths = [DATA_PATH] + [
-        DATA_FOLDER / fname
-        for fname in [
-            "Matriz Tributación PE 2022 AMBIENTAL.xlsx",
-            "Matriz Tributación PE 2022 COMPUTACION.xlsx",
-            "Matriz Tributación PE 2022 ELECTRICA.xlsx",
-            "Matriz Tributación PE 2022 OBRAS CIVILES.xlsx",
-            "Matriz Tributación PE 2023 INDUSTRIAL.xlsx",
-        ]
-    ]
+    # Compute Excel hash for cache invalidation (archivos base + planillas subidas)
+    excel_paths = [DATA_PATH] + [DATA_FOLDER / fname for fname in CARRERA_FILES.values()]
     new_hash = ai_engine.excel_hash([p for p in excel_paths if p.exists()])
+    uploaded_fp = matrices_db.fingerprint()
+    if uploaded_fp:
+        new_hash = hashlib.md5(f"{new_hash}|{uploaded_fp}".encode()).hexdigest()
 
     job_id = ai_db.create_job(req.job_type, carrera, new_hash)
 
