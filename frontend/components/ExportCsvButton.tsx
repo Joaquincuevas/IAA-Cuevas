@@ -23,6 +23,7 @@ export default function ExportCsvButton({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -33,6 +34,8 @@ export default function ExportCsvButton({
   }, [open]);
 
   async function run(scope: ExportScope) {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setOpen(false);
     setBusy(true);
     try {
@@ -40,6 +43,7 @@ export default function ExportCsvButton({
     } catch {
       // silencioso: la página puede mostrar su propio error
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
