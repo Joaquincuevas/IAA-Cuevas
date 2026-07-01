@@ -29,8 +29,22 @@ export async function login(email: string, password: string) {
   );
 }
 
+export type AIKpis = {
+  trazabilidad_pct: number;
+  trazabilidad_ras: number;
+  redundancia_alta_similitud: number;
+  total_ras: number;
+  propuestas_alta_confianza: number;
+};
+
 export async function getStats() {
-  return apiFetch<{ cursos: number; objetivos: number; links: number; carreras: number }>("/api/stats");
+  return apiFetch<{
+    cursos: number;
+    objetivos: number;
+    links: number;
+    carreras: number;
+    ai_kpis: AIKpis;
+  }>("/api/stats");
 }
 
 export async function getMe() {
