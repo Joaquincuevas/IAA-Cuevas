@@ -4,7 +4,7 @@
 function escapeCell(value: string | number | null | undefined): string {
   let s = String(value ?? "");
   // Mitiga CSV/Excel formula injection
-  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  if (/^[\u0000-\u0020]*[=+\-@]/.test(s)) s = "'" + s;
   if (/[";\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }
