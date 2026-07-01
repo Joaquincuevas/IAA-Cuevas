@@ -6,11 +6,13 @@ import {
   getAIRedundancia,
   getAIStats,
   castAIVote,
+  getCarreras,
   type AIRedundancyProposal,
   type AIStats,
 } from "@/lib/api";
 
-const CARRERAS = [
+// Fallback mientras carga /api/carreras (que además incluye las planillas subidas)
+const CARRERAS_FALLBACK = [
   { code: "ICC", label: "Computación" },
   { code: "ICI", label: "Industrial" },
   { code: "IOC", label: "Obras Civiles" },
@@ -43,8 +45,16 @@ function voteModalTitle(voto: "approve" | "reject", currentStatus: string): stri
 const PAGE_SIZE = 80;
 
 export default function RedundanciaPage() {
+  const [carreras,  setCarreras]  = useState(CARRERAS_FALLBACK);
   const [carrera,   setCarrera]   = useState("ICC");
   const [loading,   setLoading]   = useState(true);
+
+  // Carreras dinámicas: base + planillas subidas
+  useEffect(() => {
+    getCarreras()
+      .then((r) => setCarreras(r.carreras.map((c) => ({ code: c.code, label: c.nombre }))))
+      .catch(console.error);
+  }, []);
   const [proposals, setProposals] = useState<AIRedundancyProposal[]>([]);
   const [stats,     setStats]     = useState<AIStats | null>(null);
   const [fStatus,   setFStatus]   = useState("Todos");
@@ -125,10 +135,11 @@ export default function RedundanciaPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-5">
-        {CARRERAS.map((c) => (
+        {carreras.map((c) => (
           <button
             key={c.code}
             onClick={() => setCarrera(c.code)}
+            title={c.label}
             className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
               carrera === c.code
                 ? "bg-[#1B2A4A] text-white"

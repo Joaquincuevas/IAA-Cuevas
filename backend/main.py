@@ -48,14 +48,16 @@ DATA_PATH = Path(os.environ.get("DATA_PATH", str(Path(__file__).parent.parent / 
 # Folder containing the Excel files (matrices + RA_Uandes)
 DATA_FOLDER = DATA_PATH.parent
 
-CARRERA_NAMES = {
-    "IOC": "Civil",
+BASE_CARRERA_NAMES = {
+    "IOC": "Obras Civiles",
     "ICI": "Industrial",
     "ING": "General",
     "ICE": "Eléctrica",
-    "ICC": "Informática",
+    "ICC": "Computación",
     "ICA": "Ambiental",
 }
+# Se reconstruye en _reload_matrices(): base + planillas subidas
+CARRERA_NAMES = dict(BASE_CARRERA_NAMES)
 
 # ── Matrices cache ─────────────────────────────────────────────────────────────
 _matrices_cache: dict | None = None
@@ -77,6 +79,8 @@ def _reload_matrices() -> None:
 
     uploaded = matrices_db.list_matrices()
     extra_carreras: list[str] = []
+    CARRERA_NAMES.clear()
+    CARRERA_NAMES.update(BASE_CARRERA_NAMES)
     for m in uploaded:
         blob = matrices_db.get_blob(m["carrera"])
         if not blob:
@@ -87,7 +91,7 @@ def _reload_matrices() -> None:
             df_tributacion = pd.concat([df_tributacion, t], ignore_index=True)
             df_competencias = pd.concat([df_competencias, comp], ignore_index=True)
             extra_carreras.append(m["carrera"])
-            CARRERA_NAMES.setdefault(m["carrera"], m["carrera_nombre"] or m["carrera"])
+            CARRERA_NAMES[m["carrera"]] = m["carrera_nombre"] or m["carrera"]
         except Exception as e:
             print(f"WARNING: planilla subida {m['carrera']} no parseable, se omite: {e}")
 
@@ -232,11 +236,36 @@ def get_me(email: str = Depends(verify_token)):
 @app.get("/api/stats")
 def get_stats(email: str = Depends(verify_token)):
     data = get_data()
+    # Carreras totales: con RAs (Excel general) + con matriz de tributación (base o subida)
+    carreras_ra = set(data["general"]["Carrera"].dropna().unique())
+    total_carreras = len(carreras_ra | set(CARRERAS_MATRICES))
+    n_cursos = len(data["general"])
+    if _matrices_cache is not None:
+        # Suma cursos de planillas subidas que no están en el Excel de RAs
+        df_cursos: pd.DataFrame = _matrices_cache["cursos"]
+        extra = df_cursos[~df_cursos["carrera"].isin(carreras_ra)]
+        n_cursos += int(extra["codigo"].nunique())
     return {
-        "cursos": len(data["general"]),
+        "cursos": n_cursos,
         "objetivos": len(data["objectives"]),
         "links": len(data["ra_links"]),
-        "carreras": int(data["general"]["Carrera"].nunique()),
+        "carreras": total_carreras,
+    }
+
+
+@app.get("/api/carreras")
+def get_carreras(email: str = Depends(verify_token)):
+    """Carreras con matriz de tributación (base + subidas) para los selectores del frontend."""
+    uploaded = {m["carrera"] for m in matrices_db.list_matrices()}
+    return {
+        "carreras": [
+            {
+                "code": code,
+                "nombre": CARRERA_NAMES.get(code, code),
+                "origen": "subida" if code in uploaded else "base",
+            }
+            for code in CARRERAS_MATRICES
+        ]
     }
 
 # ── Conexiones ─────────────────────────────────────────────────────────────────

@@ -10,11 +10,13 @@ import {
   clearAllAIResults,
   getAILatestJobs,
   getAIStats,
+  getCarreras,
   type AIJob,
   type AIStats,
 } from "@/lib/api";
 
-const CARRERAS_OPTIONS = [
+// Fallback mientras carga /api/carreras (que además incluye las planillas subidas)
+const CARRERAS_FALLBACK = [
   { code: "", label: "Todas las carreras" },
   { code: "ICC", label: "ICC — Computación" },
   { code: "ICI", label: "ICI — Industrial" },
@@ -56,8 +58,19 @@ function fmtElapsed(sec: number) {
 }
 
 export default function AnalisisIAPage() {
+  const [carrerasOptions, setCarrerasOptions] = useState(CARRERAS_FALLBACK);
   const [jobType,  setJobType]  = useState<"conexiones" | "redundancia" | "all">("conexiones");
   const [carrera,  setCarrera]  = useState("");
+
+  // Carreras dinámicas: base + planillas subidas
+  useEffect(() => {
+    getCarreras()
+      .then((r) => setCarrerasOptions([
+        { code: "", label: "Todas las carreras" },
+        ...r.carreras.map((c) => ({ code: c.code, label: `${c.code} — ${c.nombre}` })),
+      ]))
+      .catch(console.error);
+  }, []);
   const [phase,    setPhase]    = useState<"idle" | "starting" | "running" | "done" | "error" | "cancelled">("idle");
   const [job,      setJob]      = useState<AIJob | null>(null);
   const [latest,   setLatest]   = useState<{
@@ -289,7 +302,7 @@ export default function AnalisisIAPage() {
               onChange={(e) => setCarrera(e.target.value)}
               className="text-[12px] border border-[#E5E7EB] rounded-md px-2 py-1.5 text-[#374151] disabled:opacity-50"
             >
-              {CARRERAS_OPTIONS.map((c) => (
+              {carrerasOptions.map((c) => (
                 <option key={c.code} value={c.code}>{c.label}</option>
               ))}
             </select>

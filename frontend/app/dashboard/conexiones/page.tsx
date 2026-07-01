@@ -7,11 +7,13 @@ import {
   getAIStats,
   castAIVote,
   exportAIConexiones,
+  getCarreras,
   type AIRaPeProposal,
   type AIStats,
 } from "@/lib/api";
 
-const CARRERAS = [
+// Fallback mientras carga /api/carreras (que además incluye las planillas subidas)
+const CARRERAS_FALLBACK = [
   { code: "ICC", label: "Computación" },
   { code: "ICI", label: "Industrial" },
   { code: "IOC", label: "Obras Civiles" },
@@ -44,8 +46,16 @@ type SortOption = "confianza_desc" | "confianza_asc";
 const PAGE_SIZE = 100;
 
 export default function ConexionesPage() {
+  const [carreras, setCarreras] = useState(CARRERAS_FALLBACK);
   const [carrera, setCarrera] = useState("ICC");
   const [loading, setLoading] = useState(true);
+
+  // Carreras dinámicas: base + planillas subidas
+  useEffect(() => {
+    getCarreras()
+      .then((r) => setCarreras(r.carreras.map((c) => ({ code: c.code, label: c.nombre }))))
+      .catch(console.error);
+  }, []);
   const [proposals, setProposals]   = useState<AIRaPeProposal[]>([]);
   const [stats, setStats]           = useState<AIStats | null>(null);
   const [total, setTotal]           = useState(0);
@@ -230,10 +240,11 @@ export default function ConexionesPage() {
       <div className="flex items-center gap-3 mb-4">
         {/* Carrera chips */}
         <div className="flex gap-1">
-          {CARRERAS.map((c) => (
+          {carreras.map((c) => (
             <button
               key={c.code}
               onClick={() => setCarrera(c.code)}
+              title={c.label}
               className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
                 carrera === c.code
                   ? "bg-[#1B2A4A] text-white"

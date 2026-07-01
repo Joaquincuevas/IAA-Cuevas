@@ -308,3 +308,9 @@ export async function uploadMatriz(file: File, carrera: string, nombre: string) 
 export async function deleteMatriz(carrera: string) {
   return apiFetch<{ message: string }>(`/api/matrices/${carrera}`, { method: "DELETE" });
 }
+
+export type CarreraInfo = { code: string; nombre: string; origen: "base" | "subida" };
+
+export async function getCarreras() {
+  return apiFetch<{ carreras: CarreraInfo[] }>("/api/carreras");
+}
