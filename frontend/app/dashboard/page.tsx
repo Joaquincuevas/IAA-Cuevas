@@ -90,11 +90,11 @@ export default function DashboardPage() {
         <StatCard label="CARRERAS" value={stats?.carreras ?? 6} sub="Facultad de Ingeniería" />
       </div>
 
-      {/* Indicadores IA */}
+      {/* KPIs */}
       <div className="mb-7">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">Indicadores IA</p>
-          <p className="text-[11px] text-[#9CA3AF]">Detección automática · sin validación humana</p>
+          <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">KPIs</p>
+          <p className="text-[11px] text-[#9CA3AF]">Cálculo Automático</p>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <StatCard
@@ -104,13 +104,13 @@ export default function DashboardPage() {
             sub={
               sinDatosIA
                 ? "Sin conexiones IA · ejecuta análisis en Análisis IA"
-                : `${aiKpis?.trazabilidad_ras ?? 0} de ${totalRas} RAs · confianza ≥50%`
+                : `${aiKpis?.trazabilidad_ras ?? 0} de ${totalRas} RAs con confianza ≥ 50%`
             }
           />
           <StatCard
             label="REDUNDANCIA ALTA SIMILITUD"
             value={aiKpis?.redundancia_alta_similitud ?? 0}
-            sub={`RAs con similitud ≥90% · de ${totalRas} analizados`}
+            sub={`RAs con similitud ≥ 90% de ${totalRas} analizados`}
           />
         </div>
       </div>
