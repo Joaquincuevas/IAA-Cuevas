@@ -61,7 +61,7 @@ export default function ExportCsvButton({
 
       {open && (
         <div className="absolute right-0 top-[calc(100%+6px)] w-64 bg-white border border-[#E5E7EB] rounded-lg shadow-lg z-40 py-1 overflow-hidden">
-          <button onClick={() => run("filtered")} className={itemCls}>
+          <button type="button" onClick={() => run("filtered")} className={itemCls}>
             <Filter size={14} className="text-[#1B2A4A] flex-shrink-0" />
             <span>
               {filteredLabel ?? "Vista actual (con filtros)"}
@@ -70,7 +70,7 @@ export default function ExportCsvButton({
               )}
             </span>
           </button>
-          <button onClick={() => run("all")} className={itemCls}>
+          <button type="button" onClick={() => run("all")} className={itemCls}>
             <Layers size={14} className="text-[#1B2A4A] flex-shrink-0" />
             <span>{allLabel ?? "Todo (sin filtros)"}</span>
           </button>
