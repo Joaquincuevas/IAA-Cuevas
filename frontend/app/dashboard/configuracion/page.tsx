@@ -38,7 +38,6 @@ export default function ConfiguracionPage() {
         <SyncButton
           onSync={async () => {
             setRefreshKey((k) => k + 1);
-            setMe(await getMe());
           }}
         />
       </div>
