@@ -5,7 +5,6 @@ import Link from "next/link";
 import { RefreshCw, Download, ArrowRight } from "lucide-react";
 import { getStats, type AIKpis } from "@/lib/api";
 import { getUser } from "@/lib/auth";
-import SyncButton from "@/components/SyncButton";
 
 const EXPLORE_CARDS = [
   {
