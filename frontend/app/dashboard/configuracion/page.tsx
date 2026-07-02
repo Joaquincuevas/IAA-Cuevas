@@ -6,6 +6,7 @@ import {
   getMe, changePassword,
   getMatrices, uploadMatriz, deleteMatriz, type MatrizInfo,
 } from "@/lib/api";
+import SyncButton from "@/components/SyncButton";
 
 type Me = { email: string; name: string; role: string; last_login: string | null };
 
@@ -21,16 +22,24 @@ function fmtDate(iso: string | null): string {
 
 export default function ConfiguracionPage() {
   const [me, setMe] = useState<Me | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     getMe().then(setMe).catch(console.error);
-  }, []);
+  }, [refreshKey]);
 
   return (
     <div className="p-7 max-w-5xl">
-      <div className="mb-5">
-        <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Configuración</h1>
-        <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil y seguridad de la cuenta.</p>
+      <div className="flex items-start justify-between mb-5 gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Configuración</h1>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Tu perfil y seguridad de la cuenta.</p>
+        </div>
+        <SyncButton
+          onSync={async () => {
+            setRefreshKey((k) => k + 1);
+          }}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -62,7 +71,7 @@ export default function ConfiguracionPage() {
         </section>
 
         <div className="col-span-2">
-          <PlanillasSection />
+          <PlanillasSection key={refreshKey} />
         </div>
       </div>
     </div>

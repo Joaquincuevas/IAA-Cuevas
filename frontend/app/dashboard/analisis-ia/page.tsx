@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Cpu, RefreshCw, FlaskConical, Trash2, X } from "lucide-react";
+import SyncButton from "@/components/SyncButton";
 import {
   recomputeAI,
   getAICurrentJob,
@@ -257,16 +258,32 @@ export default function AnalisisIAPage() {
   return (
     <div className="p-7 max-w-4xl">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2.5 mb-1">
-          <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Análisis IA</h1>
-          <span className="text-[10px] font-semibold bg-[#EFF6FF] text-[#3B82F6] border border-[#BFDBFE] rounded-full px-2 py-0.5">
-            Groq batch
-          </span>
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <h1 className="text-[22px] font-bold text-[#111827] tracking-tight">Análisis IA</h1>
+            <span className="text-[10px] font-semibold bg-[#EFF6FF] text-[#3B82F6] border border-[#BFDBFE] rounded-full px-2 py-0.5">
+              Groq batch
+            </span>
+          </div>
+          <p className="text-[13px] text-[#6B7280]">
+            Genera y gestiona propuestas de conexiones RA→PE y detección de redundancia semántica.
+          </p>
         </div>
-        <p className="text-[13px] text-[#6B7280]">
-          Genera y gestiona propuestas de conexiones RA→PE y detección de redundancia semántica.
-        </p>
+        <SyncButton
+          onSync={async () => {
+            await Promise.all([
+              getAILatestJobs().then(setLatest).catch(() => {}),
+              getAIStats().then(setStats).catch(() => {}),
+              getCarreras()
+                .then((r) => setCarrerasOptions([
+                  { code: "", label: "Todas las carreras" },
+                  ...r.carreras.map((c) => ({ code: c.code, label: `${c.code} — ${c.nombre}` })),
+                ]))
+                .catch(() => {}),
+            ]);
+          }}
+        />
       </div>
 
       {/* KPI cards */}
