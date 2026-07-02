@@ -245,11 +245,14 @@ def get_stats(email: str = Depends(verify_token)):
         df_cursos: pd.DataFrame = _matrices_cache["cursos"]
         extra = df_cursos[~df_cursos["carrera"].isin(carreras_ra)]
         n_cursos += int(extra["codigo"].nunique())
+    total_ras = len(set(data["objectives"]["ID_Objetivo"].tolist()))
+    ai_kpis = ai_db.get_ai_kpis(total_ras)
     return {
         "cursos": n_cursos,
-        "objetivos": len(data["objectives"]),
+        "objetivos": total_ras,
         "links": len(data["ra_links"]),
         "carreras": total_carreras,
+        "ai_kpis": ai_kpis,
     }
 
 

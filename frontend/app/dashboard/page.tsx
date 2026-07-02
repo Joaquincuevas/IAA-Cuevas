@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getStats } from "@/lib/api";
+import { RefreshCw, Download, ArrowRight } from "lucide-react";
+import { getStats, type AIKpis } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import SyncButton from "@/components/SyncButton";
 
@@ -22,13 +24,42 @@ const EXPLORE_CARDS = [
   },
 ];
 
+type DashboardStats = {
+  cursos: number;
+  objetivos: number;
+  links: number;
+  carreras: number;
+  ai_kpis: AIKpis;
+};
+
 export default function DashboardPage() {
   const user = getUser();
-  const [stats, setStats] = useState<{ cursos: number; objetivos: number; links: number; carreras: number } | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const loadStats = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const data = await getStats();
+      setStats(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    getStats().then(setStats).catch(console.error);
-  }, []);
+    loadStats();
+  }, [loadStats]);
+
+  const aiKpis = stats?.ai_kpis;
+  const totalRas = aiKpis?.total_ras ?? stats?.objetivos ?? 672;
+  const sinDatosIA =
+    aiKpis != null &&
+    aiKpis.trazabilidad_ras === 0 &&
+    aiKpis.redundancia_alta_similitud === 0 &&
+    aiKpis.propuestas_alta_confianza === 0;
 
   return (
     <div className="p-7 max-w-[1400px]">
@@ -41,6 +72,18 @@ export default function DashboardPage() {
           </p>
         </div>
         <SyncButton onSync={async () => setStats(await getStats())} />
+        <div className="flex gap-2.5">
+          <button
+            onClick={loadStats}
+            disabled={syncing}
+            className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={syncing ? "animate-spin" : ""} /> Sincronizar
+          </button>
+          <button className="flex items-center gap-2 px-3.5 py-2 border border-[#E5E7EB] rounded-lg text-[13px] text-[#4B5563] hover:bg-[#F9FAFB] transition-colors">
+            <Download size={14} /> Exportar
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -49,6 +92,31 @@ export default function DashboardPage() {
         <StatCard label="OBJETIVOS DE APRENDIZAJE" value={stats?.objetivos ?? 672} sub="Resultados de aprendizaje (RA)" />
         <StatCard label="LINKS ENTRE RA" value={stats?.links ?? 924} sub="Relaciones de prerrequisito" />
         <StatCard label="CARRERAS" value={stats?.carreras ?? 6} sub="Facultad de Ingeniería" />
+      </div>
+
+      {/* KPIs */}
+      <div className="mb-7">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-semibold tracking-widest text-[#6B7280] uppercase">KPIs</p>
+          <p className="text-[11px] text-[#9CA3AF]">Cálculo Automático</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard
+            label="TRAZABILIDAD IA"
+            value={aiKpis?.trazabilidad_pct ?? 0}
+            suffix="%"
+            sub={
+              sinDatosIA
+                ? "Sin conexiones IA · ejecuta análisis en Análisis IA"
+                : `${aiKpis?.trazabilidad_ras ?? 0} de ${totalRas} RAs con confianza ≥ 50%`
+            }
+          />
+          <StatCard
+            label="REDUNDANCIA ALTA SIMILITUD"
+            value={aiKpis?.redundancia_alta_similitud ?? 0}
+            sub={`RAs con similitud ≥ 90% de ${totalRas} analizados`}
+          />
+        </div>
       </div>
 
       {/* Explorar */}
@@ -78,11 +146,25 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: number; sub: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  sub: string;
+  suffix?: string;
+}) {
+  const display = suffix
+    ? `${value.toLocaleString("es-CL")}${suffix}`
+    : value.toLocaleString("es-CL");
+
   return (
     <div className="border border-[#E5E7EB] rounded-xl p-5">
       <p className="text-[10px] font-semibold tracking-widest text-[#6B7280] uppercase mb-2">{label}</p>
-      <p className="text-[28px] font-bold text-[#111827] leading-none mb-2 tracking-tight">{value.toLocaleString()}</p>
+      <p className="text-[28px] font-bold text-[#111827] leading-none mb-2 tracking-tight">{display}</p>
       <p className="text-[12px] text-[#6B7280] flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] inline-block" /> {sub}
       </p>

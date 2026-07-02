@@ -597,6 +597,48 @@ def get_votes_for_target(target_type: str, target_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ── KPIs (detección automática IA, sin filtro por status) ─────────────────────
+KPI_CONFIANZA_MIN = 0.5
+KPI_SIMILITUD_MIN = 0.9
+
+
+def get_ai_kpis(total_ras: int) -> dict:
+    """KPIs ejecutivos de salida IA para el dashboard de inicio."""
+    conn = _conn()
+
+    ras_con_conexion = conn.execute(
+        "SELECT COUNT(DISTINCT ra_id) FROM ai_ra_pe_proposals WHERE confianza >= ?",
+        (KPI_CONFIANZA_MIN,),
+    ).fetchone()[0]
+
+    propuestas_alta_confianza = conn.execute(
+        "SELECT COUNT(*) FROM ai_ra_pe_proposals WHERE confianza >= ?",
+        (KPI_CONFIANZA_MIN,),
+    ).fetchone()[0]
+
+    ras_alta_sim = conn.execute(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT ra_id_a AS ra_id FROM ai_redundancy_proposals WHERE similitud >= ?
+            UNION
+            SELECT ra_id_b AS ra_id FROM ai_redundancy_proposals WHERE similitud >= ?
+        )
+        """,
+        (KPI_SIMILITUD_MIN, KPI_SIMILITUD_MIN),
+    ).fetchone()[0]
+
+    conn.close()
+
+    trazabilidad_pct = round(ras_con_conexion / total_ras * 100, 1) if total_ras else 0.0
+    return {
+        "trazabilidad_pct": trazabilidad_pct,
+        "trazabilidad_ras": ras_con_conexion,
+        "redundancia_alta_similitud": ras_alta_sim,
+        "total_ras": total_ras,
+        "propuestas_alta_confianza": propuestas_alta_confianza,
+    }
+
+
 # ── Stats ─────────────────────────────────────────────────────────────────────
 def get_ai_stats(carrera: str | None = None) -> dict:
     conn = _conn()
