@@ -68,7 +68,6 @@ export default function DashboardPage() {
             Bienvenido, {user?.name ?? "usuario"} — Mallas curriculares · Universidad de los Andes
           </p>
         </div>
-        <SyncButton onSync={async () => setStats(await getStats())} />
         <div className="flex gap-2.5">
           <button
             onClick={loadStats}
