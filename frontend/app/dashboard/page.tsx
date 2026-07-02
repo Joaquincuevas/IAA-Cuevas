@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { getStats } from "@/lib/api";
 import { RefreshCw, Download, ArrowRight } from "lucide-react";
 import { getStats, type AIKpis } from "@/lib/api";
 import { getUser } from "@/lib/auth";
