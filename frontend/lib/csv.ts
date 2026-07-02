@@ -2,7 +2,10 @@
 // separador ";", BOM UTF-8 para tildes/ñ, campos citados y CRLF.
 
 function escapeCell(value: string | number | null | undefined): string {
-  let s = String(value ?? "");
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return String(value);
+
+  let s = value;
   // Mitiga CSV/Excel formula injection
   if (/^[\u0000-\u0020]*[=+\-@]/.test(s)) s = "'" + s;
   if (/[";\n\r]/.test(s)) {
